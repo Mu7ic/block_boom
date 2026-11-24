@@ -1,0 +1,21 @@
+# systemd-сервис для сервера «Блок Бум!»
+# Копировать в /etc/systemd/system/blockboom.service
+# Затем: sudo systemctl daemon-reload && sudo systemctl enable --now blockboom
+
+[Unit]
+Description=Block Boom game server (HTTP + WebSocket)
+After=network.target
+
+[Service]
+Type=simple
+User=blockboom
+WorkingDirectory=/opt/blockboom/server
+ExecStart=/usr/bin/node server.js
+# Сервер слушает только локально — наружу его отдаёт nginx
+Environment=PORT=8765
+Environment=HOST=127.0.0.1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,90 @@
+# Блок Бум!
+
+Мини-игра в жанре «блоки 8×8» для конкурса. Вся игра — один файл `index.html`
+(звуки, музыка, иконка и стили генерируются кодом, отдельных файлов нет).
+
+Режимы: **Классика**, **Аркада** (30 уровней с фруктами), **Против бота** (3 минуты),
+**Онлайн-бой** (с другом по коду комнаты — нужен сервер из папки `server/`).
+
+## Структура
+
+| Путь | Что это |
+|---|---|
+| `index.html` | Игра целиком. Это и есть файл для сдачи на конкурс. |
+| `server/server.js` | Сервер онлайн-боя: отдаёт `index.html` и держит комнаты по WebSocket (`/ws`). |
+| `deploy/nginx-blockboom.conf` | Пример настройки nginx для VPS. |
+| `deploy/blockboom.service` | systemd-сервис, чтобы сервер работал постоянно. |
+
+## Запуск у себя на компьютере
+
+Нужен Node.js 18+.
+
+```
+cd server
+npm install
+npm start
+```
+
+Открыть `http://localhost:8765`. С телефона в той же Wi-Fi сети — `http://IP_КОМПЬЮТЕРА:8765`
+(если не открывается — разрешить Node.js в брандмауэре Windows для частной сети).
+
+Для теста коротких боёв: `DURATION_MS=15000 npm start` (бой 15 секунд вместо 3 минут).
+
+## Выкладка на VPS (Ubuntu)
+
+1. **Node.js и nginx**
+   ```
+   sudo apt update
+   sudo apt install -y nginx
+   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+   sudo apt install -y nodejs
+   ```
+2. **Файлы игры** — скопировать папку проекта на сервер в `/opt/blockboom`
+   (через `git clone` или `scp`), затем:
+   ```
+   sudo useradd --system --no-create-home blockboom
+   cd /opt/blockboom/server && sudo npm install --omit=dev
+   sudo chown -R blockboom:blockboom /opt/blockboom
+   ```
+3. **Сервис** (сервер стартует сам и перезапускается при сбое)
+   ```
+   sudo cp /opt/blockboom/deploy/blockboom.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now blockboom
+   curl http://127.0.0.1:8765/health      # должно ответить: ok rooms=0 players=0
+   ```
+4. **nginx** — в `deploy/nginx-blockboom.conf` заменить `ИМЯ_ДОМЕНА`, затем:
+   ```
+   sudo cp /opt/blockboom/deploy/nginx-blockboom.conf /etc/nginx/sites-available/blockboom
+   sudo ln -s /etc/nginx/sites-available/blockboom /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+5. **HTTPS** (если есть домен; нужен для «установки на телефон»)
+   ```
+   sudo apt install -y certbot python3-certbot-nginx
+   sudo certbot --nginx -d ИМЯ_ДОМЕНА
+   ```
+6. **Открыть порты** 80 и 443, если включён файрвол: `sudo ufw allow 'Nginx Full'`.
+
+Обновить игру потом: заменить `/opt/blockboom/index.html` (сервер читает его заново
+при каждом открытии, перезапуск не нужен). Обновили `server.js` — `sudo systemctl restart blockboom`.
+
+## Файл для конкурса и онлайн
+
+Если жюри откроет `index.html` просто как файл, онлайн-бою нужно знать адрес сервера.
+Перед сдачей вписать его в `index.html`:
+
+```js
+const ONLINE_SERVER = 'wss://ИМЯ_ДОМЕНА/ws';
+```
+
+Без этого всё остальное работает полностью офлайн, а в онлайн-лобби будет подсказка,
+что онлайн доступен по ссылке с сервера.
+
+## Как устроен онлайн-бой
+
+- Игрок создаёт комнату → получает код из 4 цифр (или ссылку `…/#join=1234`).
+- Второй вводит код → сервер даёт обоим отсчёт 3-2-1 и общий таймер 3 минуты.
+- После каждого хода игра отправляет своё поле, фигуры, стиль и очки — соперник видит их на мини-поле.
+- Итог объявляет сервер. Вышел соперник — победа. «Реванш» стартует, когда его нажали оба.
+- Очки считает клиент (для прототипа этого достаточно; защиту от подделки можно добавить позже).

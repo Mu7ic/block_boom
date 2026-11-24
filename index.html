@@ -1,0 +1,2181 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1d2757">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Блок Бум!</title>
+<style>
+  /* Размер клетки подстраивается и под ширину, и под высоту экрана:
+     ~190px занимают шапка и отступы, фигуры внизу — ещё ~3.4 клетки */
+  :root{
+    --gap:3px;
+    --cell:min(48px, calc((100vw - 40px) / 8 - 3px), calc((100vh - 190px) / 11.4));
+    --cell:min(48px, calc((100vw - 40px) / 8 - 3px), calc((100dvh - 190px) / 11.4));
+    --mini:calc(var(--cell) * 0.5);
+    --top:env(safe-area-inset-top, 0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{overscroll-behavior:none}
+  body{
+    margin:0;min-height:100vh;min-height:100dvh;
+    background:linear-gradient(160deg,#1d2757,#3a2d78) fixed;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#fff;
+    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;overflow:hidden;
+  }
+  .screen{display:none;flex-direction:column;align-items:center;min-height:100vh;min-height:100dvh;padding-top:var(--top)}
+  .screen.active{display:flex}
+
+  /* ---------- Меню ---------- */
+  #menu{justify-content:center;gap:16px}
+  #menu h1{font-size:44px;margin:0 0 4px;letter-spacing:1px;text-shadow:0 4px 18px rgba(0,0,0,.4)}
+  #menu .sub{opacity:.6;margin-bottom:24px}
+  .big{width:240px;font-size:22px;padding:16px 0}
+  .big small{display:block;font-size:13px;font-weight:500;opacity:.75}
+  .big.alt{background:#36c3ff}
+
+  /* ---------- Выбор уровня ---------- */
+  #levels h2{margin:64px 0 18px}
+  #levelGrid{display:grid;grid-template-columns:repeat(5,58px);gap:12px}
+  .lvl{width:58px;height:58px;border-radius:14px;border:0;font:inherit;font-weight:800;font-size:20px;
+    background:#ffd84d;color:#1d2757;cursor:pointer;padding:0;margin:0;position:relative}
+  .lvl.done{background:#4fd67a}
+  .lvl.done::after{content:'✓';position:absolute;right:5px;top:2px;font-size:12px}
+  .lvl.locked{background:rgba(255,255,255,.1);color:rgba(255,255,255,.35);cursor:default}
+
+  /* ---------- Игра ---------- */
+  header{display:flex;gap:40px;margin:52px 0 12px;align-items:flex-end;min-height:62px}
+  .stat{text-align:center}
+  .stat b{display:block;font-size:32px;line-height:1.1;font-variant-numeric:tabular-nums}
+  .stat span{font-size:12px;opacity:.65;text-transform:uppercase;letter-spacing:1.5px}
+  .goals{display:flex;gap:10px}
+  .goal{display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.25);border-radius:999px;
+    padding:6px 14px 6px 8px;font-weight:800;font-size:22px;transition:transform .15s}
+  .goal .f{font-size:28px;line-height:1}
+  .goal.bump{transform:scale(1.2)}
+  .goal.ok{background:rgba(79,214,122,.35)}
+  .goal.ok .n::after{content:' ✓'}
+
+  .wrap{position:relative}
+  #board{
+    display:grid;grid-template-columns:repeat(8,var(--cell));gap:var(--gap);
+    padding:8px;background:#121a3c;border-radius:14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.05);
+  }
+  .cell,.pc{display:flex;align-items:center;justify-content:center;line-height:1;position:relative;isolation:isolate}
+  #board.flash{animation:flash .7s}
+  @keyframes flash{30%{box-shadow:0 0 50px rgba(255,255,255,.8), 0 0 0 4px #ffd84d}}
+  .cell{width:var(--cell);height:var(--cell);border-radius:6px;background:#222b57;
+    font-size:calc(var(--cell) * .58)}
+  .block,.cell.preview,.cell.willclear,.pc.on{
+    background:var(--c);
+    box-shadow:inset 0 -4px 0 rgba(0,0,0,.25), inset 0 3px 0 rgba(255,255,255,.35);
+  }
+  .cell.preview{opacity:.55}
+  .cell.willclear{opacity:1;filter:brightness(1.15)}
+  .cell.clearing{animation:pop .32s ease-out forwards}
+  @keyframes pop{
+    0%{transform:scale(1);filter:brightness(1.6)}
+    100%{transform:scale(.2);opacity:0}
+  }
+  #tray{display:flex;width:calc(var(--cell) * 8 + 40px);height:calc(var(--cell) * 3.4);margin-top:22px}
+  .slot{flex:1;display:flex;justify-content:center;align-items:center;touch-action:none;cursor:grab}
+  .piece{display:grid;gap:2px;cursor:grab;touch-action:none;padding:6px;transition:opacity .2s}
+  .piece .pc{width:var(--mini);height:var(--mini);border-radius:4px;font-size:calc(var(--mini) * .6)}
+  .piece.nofit{opacity:.3}
+  .piece.dragging{visibility:hidden}
+  #ghost{position:fixed;left:0;top:0;pointer-events:none;display:none;gap:var(--gap);z-index:10;
+    filter:drop-shadow(0 8px 12px rgba(0,0,0,.4))}
+  #ghost .pc{width:var(--cell);height:var(--cell);border-radius:6px;font-size:calc(var(--cell) * .58)}
+
+  .float{
+    position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);
+    font-weight:800;font-size:34px;pointer-events:none;white-space:nowrap;
+    text-shadow:0 3px 10px rgba(0,0,0,.5);animation:rise 1s ease-out forwards;
+  }
+  .float small{display:block;text-align:center;font-size:20px;color:#ffe14d}
+  @keyframes rise{
+    0%{opacity:0;transform:translate(-50%,-30%) scale(.7)}
+    15%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}
+    100%{opacity:0;transform:translate(-50%,-130%) scale(1)}
+  }
+  .fly{position:fixed;left:0;top:0;z-index:15;pointer-events:none;font-size:calc(var(--cell) * .6);
+    transition:transform .6s cubic-bezier(.5,-0.3,.6,1);}
+
+  /* ---------- Анимации ---------- */
+  .cell.land{animation:land .3s ease-out}
+  @keyframes land{0%{transform:scale(1.2)}55%{transform:scale(.88)}100%{transform:scale(1)}}
+  .wrap.shake{animation:shake .4s}
+  @keyframes shake{
+    0%,100%{transform:translate(0,0)}
+    20%{transform:translate(calc(var(--s) * -1), calc(var(--s) * .5))}
+    40%{transform:translate(var(--s), calc(var(--s) * -.5))}
+    60%{transform:translate(calc(var(--s) * -.6), 0)}
+    80%{transform:translate(calc(var(--s) * .4), calc(var(--s) * .3))}
+  }
+  .piece.appear{animation:appear .4s cubic-bezier(.3,1.6,.6,1) backwards}
+  @keyframes appear{0%{transform:scale(0) translateY(40px);opacity:0}100%{transform:none}}
+  .cell.dead{animation:dead .4s forwards}
+  @keyframes dead{to{filter:grayscale(1) brightness(.55)}}
+  .stat b.pulse{animation:pulse .35s}
+  @keyframes pulse{50%{transform:scale(1.25);color:#ffe14d}}
+  .float.gold{color:#ffd84d}
+  #fx{position:fixed;inset:0;pointer-events:none;z-index:12}
+
+  .overlay{
+    position:fixed;inset:0;background:rgba(10,12,30,.78);display:none;
+    flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:20;
+  }
+  .overlay{animation:fadeIn .3s}
+  @keyframes fadeIn{from{opacity:0}}
+  .overlay h2{margin:0;font-size:36px;animation:appear .5s cubic-bezier(.3,1.6,.6,1)}
+  .overlay p{margin:0;font-size:20px;opacity:.85}
+  .overlay .row{display:flex;gap:12px}
+  /* ---------- Против бота ---------- */
+  .big.duelBtn{background:#ff8fc8}
+  #arena{display:flex;gap:16px;align-items:flex-start}
+  #botPanel{display:none;flex-direction:column;align-items:center;gap:6px;
+    --cell:15px;--gap:2px;--mini:7px;
+    background:rgba(0,0,0,.22);border-radius:14px;padding:10px}
+  body.duel #botPanel{display:flex}
+  body.duel{
+    --cell:min(44px, calc((100vw - 200px) / 8), calc((100vh - 190px) / 11.4));
+    --cell:min(44px, calc((100vw - 200px) / 8), calc((100dvh - 190px) / 11.4));
+    --mini:calc(var(--cell) * .5)}
+  .botHead{font-size:13px;opacity:.75;text-transform:uppercase;letter-spacing:1px}
+  .botScore{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+  .botWrap{position:relative}
+  #botBoard{display:grid;grid-template-columns:repeat(8,var(--cell));gap:var(--gap);
+    padding:4px;background:#121a3c;border-radius:8px}
+  #botBoard .cell{border-radius:3px;font-size:0}
+  #botTray{display:flex;gap:6px;height:34px;align-items:center}
+  #botTray .bslot{width:40px;display:flex;justify-content:center}
+  #botTray .piece{padding:1px;cursor:default;gap:1px}
+  #botTray .piece .pc{border-radius:2px}
+  #botTray .piece.thinking{animation:think .45s ease-in-out}
+  @keyframes think{50%{transform:scale(1.4)}}
+  .botStatus{font-size:11px;opacity:.55;height:14px}
+  .botFloat{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);font-weight:800;font-size:18px;
+    pointer-events:none;white-space:nowrap;text-shadow:0 2px 6px rgba(0,0,0,.6);animation:rise 1s ease-out forwards}
+  #timer.hurry{color:#ffd84d}
+
+  button{
+    font:inherit;font-weight:700;font-size:18px;color:#1d2757;background:#ffe14d;
+    border:0;border-radius:999px;padding:12px 30px;cursor:pointer;margin-top:8px;
+  }
+  button.ghost{background:rgba(255,255,255,.14);color:#fff}
+  .corner{position:fixed;top:calc(12px + var(--top));font-size:13px;padding:8px 14px;margin:0;
+    background:rgba(255,255,255,.12);color:#fff;z-index:5}
+  .corner.l{left:12px}.corner.r{right:12px}
+
+  /* ---------- Логотип и заставка ---------- */
+  .logo{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .logoIcon{display:grid;grid-template-columns:repeat(3,16px);gap:3px;--cell:16px}
+  .logoIcon .cell{border-radius:4px}
+  .logoText{font-weight:900;font-size:58px;line-height:.92;letter-spacing:1px;text-align:center}
+  .logoText .w{display:block;white-space:nowrap}
+  .logoText .ch{display:inline-block;color:var(--c);text-shadow:0 5px 0 rgba(0,0,0,.28), 0 0 22px rgba(0,0,0,.25);
+    animation:letterIn .55s cubic-bezier(.3,1.7,.6,1) backwards, bob 3s ease-in-out infinite;
+    animation-delay:calc(var(--k) * 70ms), calc(var(--k) * 150ms + .8s)}
+  @keyframes letterIn{from{transform:translateY(-60px) scale(.3);opacity:0}}
+  @keyframes bob{50%{transform:translateY(-5px) rotate(-3deg)}}
+  .logo.small .logoText{font-size:46px}
+
+  #splash{justify-content:center;gap:34px;cursor:pointer}
+  .splashGrid{display:grid;grid-template-columns:repeat(4,var(--cell));gap:4px;--cell:38px}
+  .splashGrid .cell{animation:drop .55s cubic-bezier(.3,1.35,.6,1) backwards;animation-delay:calc(var(--k) * 55ms)}
+  .splashGrid .cell.clearing{animation:pop .32s ease-out forwards}
+  @keyframes drop{from{transform:translateY(-110vh)}}
+  .tapHint{font-size:18px;opacity:.85;animation:breathe 1.6s ease-in-out infinite;animation-delay:1.6s}
+  @keyframes breathe{50%{opacity:.3}}
+  #splash .logo{animation:fadeIn .4s 1.2s backwards}
+  #splash .logoText .ch{animation-delay:calc(var(--k) * 70ms + 1.2s), calc(var(--k) * 150ms + 2s)}
+  #splash .logoIcon{display:none}
+
+  /* ---------- Меню: настройки и доп. кнопки ---------- */
+  #menu{gap:12px}
+  .menuRow{display:flex;gap:10px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+  .pill{font-size:15px;padding:10px 18px;background:rgba(255,255,255,.14);color:#fff;margin:0;position:relative}
+  .pill .dot{position:absolute;top:4px;right:6px;width:9px;height:9px;border-radius:50%;background:#ff6fc8}
+  .tog{width:50px;height:50px;border-radius:50%;padding:0;font-size:22px;background:rgba(255,255,255,.14);
+    color:#fff;margin:0;position:relative}
+  .tog.off{opacity:.4}
+  .tog.off::after{content:'';position:absolute;left:11px;right:11px;top:50%;height:3px;margin-top:-1px;
+    background:#ff8fc8;transform:rotate(-45deg);border-radius:2px}
+  .cornerR{position:fixed;top:calc(12px + var(--top));right:12px;display:flex;gap:8px;z-index:5}
+  .cbtn{font-size:13px;padding:8px 14px;margin:0;background:rgba(255,255,255,.12);color:#fff}
+
+  /* ---------- Обучение ---------- */
+  #tutorial{z-index:40}
+  .tutCard{background:#252f63;border-radius:22px;padding:22px 20px 18px;width:min(340px, 90vw);text-align:center;
+    box-shadow:0 20px 50px rgba(0,0,0,.45);animation:appear .45s cubic-bezier(.3,1.5,.6,1)}
+  .tutCard h3{margin:14px 0 6px;font-size:24px}
+  .tutCard p{margin:0;font-size:15px;line-height:1.45;opacity:.85;min-height:66px}
+  .tutDemo{height:150px;width:200px;margin:0 auto;position:relative;display:flex;align-items:center;justify-content:center}
+  .tutDots{display:flex;gap:6px;justify-content:center;margin:12px 0 2px}
+  .tutDots i{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25)}
+  .tutDots i.on{background:#ffd84d;width:20px;border-radius:4px}
+  .dGrid{position:absolute;left:51px;top:8px;display:grid;grid-template-columns:repeat(5,18px);gap:2px;--cell:18px;
+    padding:0;background:transparent}
+  .dGrid .cell{border-radius:4px}
+  .dPiece{position:absolute;left:0;top:0;display:grid;grid-template-columns:18px;gap:2px;--cell:18px;
+    animation:dMove 2.8s ease-in-out infinite}
+  .dHand{position:absolute;left:0;top:0;font-size:30px;animation:dHand 2.8s ease-in-out infinite}
+  @keyframes dMove{0%,15%{transform:translate(83px,112px) scale(.7);opacity:1}55%,85%{transform:translate(111px,28px)}100%{transform:translate(111px,28px);opacity:0}}
+  @keyframes dHand{0%,15%{transform:translate(88px,128px);opacity:1}55%{transform:translate(116px,44px);opacity:1}70%,100%{transform:translate(140px,90px);opacity:0}}
+  .dLine{position:relative;display:grid;grid-template-columns:repeat(8,20px);gap:3px;--cell:20px}
+  .dLine .cell.block{animation:dClear 2.6s infinite}
+  .dLine .dDrop{position:absolute;left:138px;top:0;display:grid;grid-template-columns:repeat(2,20px);gap:3px;
+    animation:dDrop 2.6s infinite}
+  @keyframes dDrop{0%{transform:translateY(-70px);opacity:0}15%{opacity:1}40%,55%{transform:translateY(0);opacity:1;filter:none}
+    60%{filter:brightness(1.8)}72%{transform:scale(.2);opacity:0}100%{opacity:0}}
+  @keyframes dClear{0%,55%{transform:none;opacity:1}60%{filter:brightness(1.8)}72%{transform:scale(.2);opacity:0}92%{opacity:0;transform:scale(.6)}100%{opacity:1;transform:none}}
+  .dX5{position:absolute;top:4px;font-size:44px;font-weight:900;color:#ffd84d;text-shadow:0 4px 0 rgba(0,0,0,.3);
+    animation:pulse 1.2s ease-in-out infinite}
+  .dSkins{position:absolute;bottom:14px;display:grid;grid-template-columns:repeat(4,32px);gap:4px;--cell:32px}
+  .dModes{display:flex;gap:22px;font-size:46px}
+  .dModes span{animation:bob 2s ease-in-out infinite}
+  .dModes span:nth-child(2){animation-delay:.3s}.dModes span:nth-child(3){animation-delay:.6s}
+
+  /* ---------- Подсказка при первом входе в режим ---------- */
+  .toast{position:fixed;left:50%;top:38%;transform:translateX(-50%);background:rgba(12,15,40,.93);
+    padding:14px 18px;border-radius:16px;font-size:15px;line-height:1.4;width:max-content;max-width:86vw;text-align:center;
+    z-index:30;pointer-events:none;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:toastIn .35s cubic-bezier(.3,1.5,.6,1)}
+  .toast.out{animation:fadeOut .4s forwards}
+  @keyframes toastIn{from{opacity:0;transform:translate(-50%,20px) scale(.9)}}
+  @keyframes fadeOut{to{opacity:0}}
+
+  /* ---------- Коллекция стилей ---------- */
+  #collection{overflow-y:auto;height:100vh;height:100dvh;touch-action:pan-y;padding-bottom:30px}
+  #collection h2{margin:64px 0 10px}
+  .collProg{display:flex;align-items:center;gap:12px;margin-bottom:16px;font-weight:700}
+  .collProg .bar{width:160px;height:10px;border-radius:5px;background:rgba(0,0,0,.3);overflow:hidden}
+  .collProg .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd84d,#ff8fc8);border-radius:5px;transition:width .6s}
+  #collGrid{display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;width:min(440px, 92vw)}
+  .skinCard{background:rgba(0,0,0,.22);border-radius:14px;padding:12px 4px 8px;display:flex;flex-direction:column;
+    align-items:center;gap:7px;position:relative}
+  .skinPrev{display:grid;grid-template-columns:repeat(2,var(--cell));gap:3px;--cell:26px;--gap:3px}
+  .skinCard .nm{font-size:11px;text-align:center;opacity:.9;min-height:2.6em;line-height:1.3;padding:0 2px}
+  .skinCard.locked .skinPrev{filter:blur(2px) grayscale(1) brightness(.45)}
+  .skinCard.locked .nm{opacity:.4}
+  .skinCard .lock{position:absolute;top:22px;font-size:22px}
+  .skinCard.current{box-shadow:inset 0 0 0 2px #ffd84d}
+  .skinCard.isNew::after{content:'NEW';position:absolute;top:-6px;right:-4px;background:#ff6fc8;color:#fff;
+    font-size:10px;font-weight:800;padding:2px 6px;border-radius:8px}
+  .collHint{opacity:.6;font-size:14px;text-align:center;max-width:300px;margin-top:16px}
+
+  /* ---------- Онлайн-бой ---------- */
+  .big.onlineBtn{background:#4fd67a}
+  #online{justify-content:center;gap:12px;padding:70px 20px 30px}
+  #online h2{margin:0;font-size:30px}
+  .lobbySub{margin:0 0 8px;opacity:.65}
+  input.field{font:inherit;font-size:18px;font-weight:700;color:#fff;background:rgba(0,0,0,.25);border:2px solid rgba(255,255,255,.15);
+    border-radius:14px;padding:12px 16px;text-align:center;outline:none;width:min(260px, 80vw);
+    user-select:text;-webkit-user-select:text;touch-action:manipulation}
+  input.field:focus{border-color:#ffd84d}
+  input.field::placeholder{color:rgba(255,255,255,.4);font-weight:500}
+  #lobbyMain,#lobbyWait{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .or{opacity:.5;font-size:14px}
+  .joinRow{display:flex;gap:8px}
+  .joinRow input.field{width:120px;letter-spacing:6px;font-size:22px}
+  .joinRow button{margin:0}
+  .codeLabel{opacity:.65;font-size:14px;text-transform:uppercase;letter-spacing:1.5px}
+  .bigCode{font-size:64px;font-weight:900;letter-spacing:10px;color:#ffd84d;text-shadow:0 5px 0 rgba(0,0,0,.3);
+    user-select:text;-webkit-user-select:text}
+  .waitTxt{font-size:17px;opacity:.85}
+  .waitTxt .dots::after{content:'';animation:dots 1.4s steps(4) infinite}
+  @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
+  .lobbyStatus{min-height:22px;font-size:15px;color:#ffb3d9;text-align:center;max-width:300px}
+  .countdown{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);font-size:110px;font-weight:900;
+    color:#ffd84d;text-shadow:0 8px 0 rgba(0,0,0,.3);z-index:35;pointer-events:none;animation:cdPop .9s ease-out forwards}
+  @keyframes cdPop{0%{transform:translate(-50%,-50%) scale(2.2);opacity:0}25%{transform:translate(-50%,-50%) scale(1);opacity:1}
+    80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.85);opacity:0}}
+
+  /* ---------- Телефон ---------- */
+  @media (max-width:700px){
+    header{gap:28px;margin:50px 0 10px;min-height:56px}
+    .stat b{font-size:28px}
+    .goal{font-size:19px;padding:5px 11px 5px 7px}
+    .goal .f{font-size:24px}
+    #tray{width:calc(var(--cell) * 8 + 30px);margin-top:16px}
+    .overlay h2{font-size:30px;text-align:center;padding:0 16px}
+    .overlay p{font-size:18px;text-align:center;padding:0 16px}
+    #levelGrid{grid-template-columns:repeat(5,min(58px, calc((100vw - 80px) / 5)));gap:10px}
+    .lvl{width:auto;aspect-ratio:1;height:auto}
+    .big{width:min(260px, 80vw);padding:13px 0;font-size:20px}
+    .logoText{font-size:48px}
+    .logo.small .logoText{font-size:38px}
+    .logo.small .logoIcon{display:none}
+    #collGrid{grid-template-columns:repeat(4, 1fr);gap:8px}
+    .skinPrev{--cell:22px}
+
+    /* Дуэль: бот — компактной полосой над полем */
+    body.duel{
+      --cell:min(48px, calc((100vw - 40px) / 8 - 3px), calc((100vh - 315px) / 11.4));
+      --cell:min(48px, calc((100vw - 40px) / 8 - 3px), calc((100dvh - 315px) / 11.4));
+    }
+    body.duel header{margin-bottom:6px;min-height:50px}
+    #arena{flex-direction:column;align-items:center;gap:8px}
+    body.duel #botPanel{display:grid;order:-1;--cell:9px;--gap:1px;--mini:5px;
+      grid-template-columns:auto auto;grid-template-areas:'b h' 'b s' 'b t' 'b st';
+      column-gap:14px;row-gap:0;align-items:center;justify-items:start;padding:6px 14px}
+    #botPanel .botWrap{grid-area:b}
+    #botPanel .botHead{grid-area:h;font-size:11px}
+    #botPanel .botScore{grid-area:s;font-size:22px;line-height:1.1}
+    #botPanel #botTray{grid-area:t;height:26px}
+    #botPanel .botStatus{grid-area:st}
+    #botTray .bslot{width:30px}
+    #botBoard{padding:3px;border-radius:6px}
+    #botBoard .cell{border-radius:2px}
+    .botFloat{font-size:14px}
+  }
+  /* Очень низкие экраны (телефон боком и т.п.) */
+  @media (max-height:560px){
+    header{margin-top:8px;min-height:0}
+    .stat b{font-size:22px}
+  }
+</style>
+</head>
+<body>
+
+<!-- Заставка -->
+<div class="screen active" id="splash">
+  <div class="splashGrid" id="splashGrid"></div>
+  <div class="logo" id="splashLogo"></div>
+  <div class="tapHint">Коснись, чтобы начать</div>
+</div>
+
+<!-- Меню -->
+<div class="screen" id="menu">
+  <div class="logo small" id="menuLogo"></div>
+  <button class="big" id="btnClassic">Классика<small>играй на рекорд</small></button>
+  <button class="big alt" id="btnArcade">Аркада<small>уровни с фруктами</small></button>
+  <button class="big duelBtn" id="btnDuel">Против бота 🤖<small>кто больше за 3 минуты</small></button>
+  <button class="big onlineBtn" id="btnOnline">Онлайн-бой 🌐<small>с другом по коду комнаты</small></button>
+  <div class="menuRow">
+    <button class="pill" id="btnCollection">🎨 Коллекция <b id="collCount"></b></button>
+    <button class="pill" id="btnHelp">❓ Как играть</button>
+  </div>
+  <div class="menuRow">
+    <button class="tog" id="togSound" title="Звуки">🔊</button>
+    <button class="tog" id="togMusic" title="Музыка">🎵</button>
+    <button class="tog" id="togVibro" title="Вибрация">📳</button>
+    <button class="tog" id="btnInstall" title="Установить на телефон" style="display:none">📲</button>
+  </div>
+</div>
+
+<!-- Онлайн-бой: лобби -->
+<div class="screen" id="online">
+  <button class="corner l" id="onlineBack">← Меню</button>
+  <h2>Онлайн-бой 🌐</h2>
+  <p class="lobbySub">3 минуты — у кого больше очков</p>
+  <input class="field" id="nameInput" maxlength="16" placeholder="Твоё имя" autocomplete="off">
+  <div id="lobbyMain">
+    <button class="big" id="btnCreate">Создать бой<small>получишь код для друга</small></button>
+    <div class="or">или</div>
+    <div class="joinRow">
+      <input class="field" id="codeInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Код" autocomplete="off">
+      <button id="btnJoin">Войти</button>
+    </div>
+  </div>
+  <div id="lobbyWait" style="display:none">
+    <div class="codeLabel">Код комнаты</div>
+    <div class="bigCode" id="bigCode">----</div>
+    <div class="waitTxt">Ждём соперника<span class="dots"></span></div>
+    <button class="pill" id="btnShare">📤 Отправить другу</button>
+    <button class="ghost" id="btnCancel">Отмена</button>
+  </div>
+  <div class="lobbyStatus" id="lobbyStatus"></div>
+</div>
+
+<!-- Коллекция стилей -->
+<div class="screen" id="collection">
+  <button class="corner l" data-go="menu">← Меню</button>
+  <h2>Коллекция стилей</h2>
+  <div class="collProg"><div class="bar"><i id="collBar"></i></div><span id="collText"></span></div>
+  <div id="collGrid"></div>
+  <p class="collHint">Новый стиль открывается, когда сносишь 3+ линии за один ход</p>
+</div>
+
+<!-- Выбор уровня -->
+<div class="screen" id="levels">
+  <button class="corner l" data-go="menu">← Меню</button>
+  <h2>Выбери уровень</h2>
+  <div id="levelGrid"></div>
+</div>
+
+<!-- Игра -->
+<div class="screen" id="game">
+  <button class="corner l" id="btnBack">← Назад</button>
+  <div class="cornerR">
+    <button class="cbtn" id="btnMute" title="Звук">🔊</button>
+    <button class="cbtn" id="btnRestart">Заново</button>
+  </div>
+  <header id="hud"></header>
+  <div id="arena">
+    <div class="wrap"><div id="board"></div></div>
+    <div id="botPanel">
+      <div class="botHead" id="botHead">🤖 Бот</div>
+      <div class="botScore" id="botScore">0</div>
+      <div class="botWrap"><div id="botBoard"></div></div>
+      <div id="botTray"></div>
+      <div class="botStatus" id="botStatus">думает…</div>
+    </div>
+  </div>
+  <div id="tray"><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
+</div>
+
+<div id="ghost"></div>
+
+<div class="overlay" id="tutorial">
+  <div class="tutCard">
+    <div class="tutDemo" id="tutDemo"></div>
+    <h3 id="tutTitle"></h3>
+    <p id="tutText"></p>
+    <div class="tutDots" id="tutDots"></div>
+    <div class="row" style="justify-content:center">
+      <button class="ghost" id="tutSkip">Пропустить</button>
+      <button id="tutNext">Далее</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overLose">
+  <h2>Нет ходов</h2>
+  <p id="loseText"></p>
+  <div class="row">
+    <button class="ghost" id="loseMenu">Выйти</button>
+    <button id="loseRetry">Ещё раз</button>
+  </div>
+</div>
+<div class="overlay" id="overDuel">
+  <h2 id="duelTitle"></h2>
+  <p id="duelText"></p>
+  <div class="row">
+    <button class="ghost" id="duelMenu">Меню</button>
+    <button id="duelAgain">Реванш</button>
+  </div>
+</div>
+<div class="overlay" id="overWin">
+  <h2>Уровень пройден! 🎉</h2>
+  <p id="winText"></p>
+  <div class="row">
+    <button class="ghost" id="winMenu">К уровням</button>
+    <button id="winNext">Следующий →</button>
+  </div>
+</div>
+
+<script>
+const N = 8;
+const COLORS = ['#ff5d5d','#ffa93b','#ffd84d','#4fd67a','#36c3ff','#5d7bff','#b45dff','#ff6fc8'];
+const STONE = '#5a6396';
+const FRUITS = ['🍓','🍋','🍇','🍊','🍏','🍒'];
+const LEVEL_COUNT = 30;
+
+// Фигуры: '#' — блок, '.' — пусто
+const RAW = [
+  '#',
+  '##', '#\n#',
+  '###', '#\n#\n#',
+  '####', '#\n#\n#\n#',
+  '#####', '#\n#\n#\n#\n#',
+  '##\n##',
+  '###\n###', '##\n##\n##',
+  '###\n###\n###',
+  '##\n#.', '##\n.#', '#.\n##', '.#\n##',
+  '###\n#..\n#..', '###\n..#\n..#', '#..\n#..\n###', '..#\n..#\n###',
+  '#.\n#.\n##', '.#\n.#\n##', '##\n#.\n#.', '##\n.#\n.#',
+  '#..\n###', '..#\n###', '###\n#..', '###\n..#',
+  '###\n.#.', '.#.\n###', '#.\n##\n#.', '.#\n##\n.#',
+  '##.\n.##', '.##\n##.', '#.\n##\n.#', '.#\n##\n#.',
+];
+const SHAPES = RAW.map(s => {
+  const rows = s.split('\n');
+  const cells = [];
+  rows.forEach((row, r) => [...row].forEach((ch, c) => { if (ch === '#') cells.push([r, c]); }));
+  return { cells, h: rows.length, w: Math.max(...rows.map(r => r.length)) };
+});
+
+const GAME_NAME = 'Блок Бум!';
+
+// ---------- Настройки (запоминаются в браузере) ----------
+const Settings = {
+  get sound() { return localStorage.getItem('bp-sound') !== '0'; },
+  set sound(v) { localStorage.setItem('bp-sound', v ? '1' : '0'); },
+  get music() { return localStorage.getItem('bp-music') !== '0'; },
+  set music(v) { localStorage.setItem('bp-music', v ? '1' : '0'); },
+  get vibro() { return localStorage.getItem('bp-vibro') !== '0'; },
+  set vibro(v) { localStorage.setItem('bp-vibro', v ? '1' : '0'); },
+};
+
+// ---------- Звук: всё синтезируется кодом (Web Audio), файлов нет ----------
+const Sound = {
+  ctx: null, sfx: null, mus: null,
+  init() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    const comp = this.ctx.createDynamicsCompressor();
+    comp.connect(this.ctx.destination);
+    this.sfx = this.ctx.createGain(); this.sfx.gain.value = Settings.sound ? .55 : 0; this.sfx.connect(comp);
+    this.mus = this.ctx.createGain(); this.mus.gain.value = Settings.music ? .2 : 0; this.mus.connect(comp);
+  },
+  // Браузеры разрешают звук только после касания — вызываем на каждом pointerdown
+  unlock() {
+    this.init();
+    if (!this.ctx) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    Music.start();
+  },
+  setSound(on) { Settings.sound = on; if (this.sfx) this.sfx.gain.value = on ? .55 : 0; },
+  setMusic(on) {
+    Settings.music = on;
+    if (this.mus) this.mus.gain.setTargetAtTime(on ? .2 : 0, this.ctx.currentTime, .15);
+    if (on) Music.start(); else Music.stop();
+  },
+  tone(freq, dur, o = {}) {
+    if (!this.ctx || this.ctx.state !== 'running' || (!o.music && !Settings.sound)) return;
+    const t = this.ctx.currentTime + (o.delay || 0);
+    const osc = this.ctx.createOscillator(), g = this.ctx.createGain();
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    if (o.to) osc.frequency.exponentialRampToValueAtTime(o.to, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(o.vol ?? .3, t + (o.attack || .006));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g); g.connect(o.music ? this.mus : this.sfx);
+    osc.start(t); osc.stop(t + dur + .03);
+  },
+  noise(dur, o = {}) {
+    if (!this.ctx || this.ctx.state !== 'running' || !Settings.sound) return;
+    const t = this.ctx.currentTime + (o.delay || 0);
+    const len = Math.floor(this.ctx.sampleRate * dur);
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const f = this.ctx.createBiquadFilter(); f.type = o.type || 'lowpass'; f.frequency.value = o.freq || 1200;
+    const g = this.ctx.createGain(); g.gain.value = o.vol ?? .2;
+    src.connect(f); f.connect(g); g.connect(this.sfx);
+    src.start(t);
+  },
+};
+
+// Пентатоника — любые ноты из неё звучат приятно вместе
+const PENTA = [261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.51, 1567.98, 1760];
+const SFX = {
+  click()  { Sound.tone(880, .05, { type: 'triangle', vol: .1 }); },
+  pick()   { Sound.tone(520, .07, { type: 'triangle', vol: .16, to: 720 }); },
+  place()  { Sound.tone(210, .13, { vol: .45, to: 110 }); Sound.noise(.05, { freq: 900, vol: .1 }); },
+  bad()    { Sound.tone(250, .15, { type: 'square', vol: .05, to: 160 }); },
+  // Чем больше комбо — тем выше арпеджио
+  clear(n, combo) {
+    const base = Math.min(combo - 1, 7);
+    for (let k = 0; k < n + 2; k++)
+      Sound.tone(PENTA[Math.min(base + k + 3, PENTA.length - 1)], .24, { type: 'triangle', vol: .2, delay: k * .06 });
+    Sound.noise(.35, { type: 'highpass', freq: 2600, vol: .07 });
+  },
+  mega() {
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, k) => {
+      Sound.tone(f, .55, { type: 'sawtooth', vol: .06, delay: .12 + k * .05 });
+      Sound.tone(f * 2, .4, { vol: .07, delay: .12 + k * .05 });
+    });
+  },
+  skin()    { for (let k = 0; k < 9; k++) Sound.tone(PENTA[k + 5], .2, { vol: .11, delay: k * .04 }); },
+  perfect() { [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((f, k) => Sound.tone(f, .6, { type: 'triangle', vol: .12, delay: k * .08 })); },
+  fruit()   { Sound.tone(1318.51, .1, { vol: .14, to: 1760 }); },
+  refill()  { Sound.noise(.16, { type: 'bandpass', freq: 1800, vol: .05 }); },
+  tick()    { Sound.tone(1100, .04, { type: 'square', vol: .045 }); },
+  record()  { [659.25, 783.99, 1046.5, 1318.51].forEach((f, k) => Sound.tone(f, .3, { type: 'triangle', vol: .14, delay: k * .1 })); },
+  win()     { [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5].forEach((f, k) => Sound.tone(f, k === 5 ? .8 : .18, { type: 'triangle', vol: .2, delay: k * .13 })); },
+  lose()    { [392, 349.23, 311.13, 261.63].forEach((f, k) => Sound.tone(f, .38, { type: 'triangle', vol: .16, delay: k * .22 })); },
+  stuck()   { Sound.tone(320, .45, { vol: .2, to: 120 }); },
+  botClear(){ Sound.tone(700, .08, { vol: .04 }); },
+  boom()    { Sound.tone(120, .5, { vol: .5, to: 45 }); Sound.noise(.5, { freq: 700, vol: .25 }); },
+};
+
+// Фоновая музыка: спокойная петля C–G–Am–F, тоже генерируется
+const Music = {
+  timer: null, step: 0, next: 0,
+  chords: [[130.81, [261.63, 329.63, 392]], [98, [246.94, 293.66, 392]],
+           [110, [261.63, 329.63, 440]], [87.31, [261.63, 349.23, 440]]],
+  start() {
+    if (this.timer || !Sound.ctx || !Settings.music) return;
+    this.next = Sound.ctx.currentTime + .15;
+    this.timer = setInterval(() => this.schedule(), 100);
+  },
+  stop() { clearInterval(this.timer); this.timer = null; },
+  schedule() {
+    const ctx = Sound.ctx, beat = 60 / 92 / 2;
+    if (ctx.state !== 'running') return;
+    if (this.next < ctx.currentTime) this.next = ctx.currentTime + .05; // после сворачивания вкладки
+    while (this.next < ctx.currentTime + .3) {
+      const bar = Math.floor(this.step / 8) % 4, s = this.step % 8;
+      const [bass, arp] = this.chords[bar];
+      const delay = this.next - ctx.currentTime;
+      if (s === 0 || s === 4) Sound.tone(bass, beat * 3.6, { vol: .5, delay, music: true });
+      const note = arp[[0, 1, 2, 1, 0, 2, 1, 2][s]] * (s >= 4 ? 2 : 1);
+      Sound.tone(note, beat * 1.7, { type: 'triangle', vol: .16, delay, music: true });
+      this.next += beat; this.step++;
+    }
+  },
+};
+
+// Вибрация (Android; на iPhone браузер её не поддерживает — тогда просто ничего)
+function buzz(p) {
+  if (!Settings.vibro || !navigator.vibrate) return;
+  try { navigator.vibrate(p); } catch (e) {}
+}
+
+document.addEventListener('pointerdown', () => Sound.unlock(), true);
+document.addEventListener('click', e => { if (e.target.closest('button')) SFX.click(); });
+document.addEventListener('visibilitychange', () => {
+  if (!Sound.ctx) return;
+  if (document.hidden) Sound.ctx.suspend(); else Sound.ctx.resume();
+});
+
+// ---------- Коллекция стилей (какие уже открыты) ----------
+const Coll = {
+  read(key) { try { return new Set(JSON.parse(localStorage.getItem(key) || '[]')); } catch (e) { return new Set(); } },
+  got() { return this.read('bp-got'); },
+  seen() { return this.read('bp-seen'); },
+  add(id) {
+    const s = this.got(); const isNew = !s.has(id);
+    s.add(id); localStorage.setItem('bp-got', JSON.stringify([...s]));
+    return isNew;
+  },
+  markSeen() { localStorage.setItem('bp-seen', JSON.stringify([...this.got()])); },
+};
+
+// ---------- Стили блоков ----------
+// Каждый стиль рисуется псевдоэлементами ::before / ::after поверх блока.
+// --c — цвет фигуры, --i — номер клетки (для волновых задержек анимаций).
+const W = 'animation-delay:calc(var(--i, 0) * -110ms);'; // «волна» по полю
+const SKINS = [
+  { id: 'classic', name: 'Классика' },
+  { id: 'disco', name: 'Диско-шар 🪩',
+    before: `background:
+      radial-gradient(circle at 28% 28%, #fff 0 5%, transparent 12%),
+      repeating-linear-gradient(90deg, rgba(0,0,0,.28) 0 1px, transparent 1px 25%),
+      repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 1px, transparent 1px 25%),
+      linear-gradient(90deg, #7f8aa0, #fff, color-mix(in srgb, var(--c) 65%, #fff), #fff, #7f8aa0);
+      background-size:auto,auto,auto,40px 100%;
+      animation:sk-disco 1.1s linear infinite;`,
+    after: `width:34%;height:34%;left:56%;top:10%;inset:auto;border-radius:50%;
+      background:radial-gradient(circle, #fff 0 12%, transparent 65%);
+      animation:sk-twinkle .8s ease-in-out infinite;${W}`,
+    keys: `@keyframes sk-disco{to{background-position:0 0,0 0,0 0,40px 0}}` },
+  { id: 'melon', name: 'Арбузики 🍉',
+    before: `background:
+      radial-gradient(ellipse 7% 11% at 30% 38%, #222 0 85%, transparent 100%),
+      radial-gradient(ellipse 7% 11% at 56% 26%, #222 0 85%, transparent 100%),
+      radial-gradient(ellipse 7% 11% at 74% 46%, #222 0 85%, transparent 100%),
+      radial-gradient(ellipse 7% 11% at 46% 56%, #222 0 85%, transparent 100%),
+      linear-gradient(#ff4d6d 0 70%, #fdeaea 70% 78%, #74d86b 78% 87%, #2f8f3a 87%);
+      animation:sk-juicy 1.8s ease-in-out infinite;${W}` },
+  { id: 'egg', name: 'Яичница 🍳',
+    before: `background:
+      radial-gradient(circle at 36% 62%, #fffdf3 0 34%, transparent 36%),
+      radial-gradient(circle at 64% 40%, #fffdf3 0 34%, transparent 36%),
+      radial-gradient(circle at 50% 50%, #fffdf3 0 38%, transparent 40%),
+      color-mix(in srgb, var(--c) 30%, #2b2b33);
+      box-shadow:inset 0 -3px 0 rgba(0,0,0,.35);`,
+    after: `inset:auto;left:31%;top:29%;width:40%;height:40%;border-radius:50%;
+      background:radial-gradient(circle at 35% 32%, #fff8 0 14%, #ffc107 22%, #ff9100 100%);
+      box-shadow:0 2px 3px rgba(0,0,0,.25);
+      animation:sk-jiggle 1.3s ease-in-out infinite;${W}` },
+  { id: 'neon', name: 'Неон',
+    before: `background:#0c0e22;border:2px solid var(--c);
+      box-shadow:0 0 6px var(--c), inset 0 0 6px var(--c);
+      animation:sk-neon 1.4s ease-in-out infinite;${W}`,
+    keys: `@keyframes sk-neon{50%{box-shadow:0 0 16px var(--c), inset 0 0 12px var(--c);filter:brightness(1.35)}}` },
+  { id: 'candy', name: 'Карамельки 🍬',
+    before: `background:repeating-linear-gradient(45deg, var(--c) 0 6px, #fff 6px 12px);
+      background-size:16.97px 16.97px;
+      box-shadow:inset 0 -4px 0 rgba(0,0,0,.2), inset 0 3px 0 rgba(255,255,255,.55);
+      animation:sk-candy .8s linear infinite;`,
+    keys: `@keyframes sk-candy{to{background-position:16.97px 0}}` },
+  { id: 'jelly', name: 'Желе',   // блик плавно ходит по кругу
+    before: `background:color-mix(in srgb, var(--c) 80%, #fff);
+      border-radius:32%;box-shadow:inset 0 -5px 8px rgba(0,0,0,.25);`,
+    after: `inset:auto;left:35%;top:35%;width:30%;height:30%;border-radius:50%;
+      background:radial-gradient(circle, rgba(255,255,255,.9) 0 30%, transparent 70%);
+      animation:sk-orbit 3.2s linear infinite;${W}`,
+    keys: `@keyframes sk-orbit{from{transform:rotate(0) translateX(70%) rotate(0)}to{transform:rotate(360deg) translateX(70%) rotate(-360deg)}}` },
+  { id: 'eyes', name: 'Глазастики 👀',   // зрачки смотрят по сторонам и моргают
+    before: `background:
+      radial-gradient(circle at 32% 45%, #fff 0 17%, transparent 18%),
+      radial-gradient(circle at 68% 45%, #fff 0 17%, transparent 18%),
+      var(--c);
+      box-shadow:inset 0 -4px 0 rgba(0,0,0,.25), inset 0 3px 0 rgba(255,255,255,.35);`,
+    after: `background:
+      radial-gradient(circle at 32% 45%, #1a1a2e 0 7%, transparent 8%),
+      radial-gradient(circle at 68% 45%, #1a1a2e 0 7%, transparent 8%);
+      animation:sk-look 4s ease-in-out infinite;${W}`,
+    keys: `@keyframes sk-look{
+      0%,100%{transform:translateX(-6%)} 40%{transform:translateX(6%)}
+      44%{transform:translateX(6%) scaleY(.1)} 48%{transform:translateX(6%)}
+      70%{transform:translateX(0) translateY(-5%)}}` },
+  { id: 'ice', name: 'Лёд ❄️',
+    before: `background:linear-gradient(110deg, transparent 30%, rgba(255,255,255,.9) 45%, transparent 60%),
+      linear-gradient(160deg, #e6f9ff, #8fd6ff 60%, color-mix(in srgb, var(--c) 35%, #5fbfff));
+      background-size:300% 100%, auto;border:1px solid rgba(255,255,255,.8);
+      animation:sk-shine 2.6s ease-in-out infinite;${W}` },
+  { id: 'gold', name: 'Золото 👑',   // монетка иногда переворачивается
+    before: `background:radial-gradient(circle, transparent 0 28%, rgba(120,80,0,.35) 30% 34%, transparent 36%),
+      linear-gradient(145deg, #fff3b0, #f5c518 35%, #b8860b 72%, #ffe680);
+      box-shadow:inset 0 -3px 0 rgba(120,80,0,.5), inset 0 2px 0 rgba(255,255,255,.7);
+      animation:sk-flip 4s ease-in-out infinite;animation-delay:calc(var(--i, 0) * -250ms);`,
+    keys: `@keyframes sk-flip{0%,75%{transform:rotateY(0)}100%{transform:rotateY(360deg)}}` },
+  { id: 'pixel', name: 'Пиксели',
+    before: `background:conic-gradient(rgba(255,255,255,.2) 25%, transparent 0 50%, rgba(255,255,255,.2) 0 75%, transparent 0) 0 0/50% 50%, var(--c);
+      border-radius:0;box-shadow:inset -4px -4px 0 rgba(0,0,0,.35), inset 4px 4px 0 rgba(255,255,255,.4);` },
+  { id: 'water', name: 'Аквариум 🌊',   // внутри плещется вода
+    host: 'overflow:hidden;',
+    before: `background:linear-gradient(#d9f3ff, #a8defa);`,
+    after: `inset:auto;left:-50%;top:42%;width:200%;height:200%;border-radius:42%;
+      background:color-mix(in srgb, var(--c) 30%, #1e88e5);
+      animation:sk-spin 6s linear infinite;${W}` },
+  { id: 'donut', name: 'Пончики 🍩',
+    before: `background:
+      radial-gradient(circle at 32% 30%, #4fc3f7 0 4%, transparent 5%),
+      radial-gradient(circle at 66% 28%, #ffeb3b 0 4%, transparent 5%),
+      radial-gradient(circle at 72% 64%, #81c784 0 4%, transparent 5%),
+      radial-gradient(circle at 30% 68%, #fff 0 4%, transparent 5%),
+      radial-gradient(circle, transparent 0 17%, #f48fb1 19% 52%, #d9a066 54% 68%, transparent 70%);
+      animation:sk-spin 5s linear infinite;` },
+  { id: 'cookie', name: 'Печеньки 🍪',
+    before: `background:
+      radial-gradient(circle at 32% 30%, #3e2210 0 8%, transparent 9%),
+      radial-gradient(circle at 66% 36%, #3e2210 0 7%, transparent 8%),
+      radial-gradient(circle at 44% 68%, #3e2210 0 9%, transparent 10%),
+      radial-gradient(circle at 72% 72%, #3e2210 0 6%, transparent 7%),
+      radial-gradient(circle, #e2a65c 0 58%, #b5733a 66%, transparent 68%);
+      animation:sk-bob 1.5s ease-in-out infinite;${W}` },
+  { id: 'wood', name: 'Дерево',
+    before: `background:repeating-linear-gradient(90deg, rgba(0,0,0,.12) 0 2px, transparent 2px 7px),
+      linear-gradient(90deg, #a0652c, #c98b4c, #8b5524);
+      box-shadow:inset 0 0 0 2px rgba(60,30,10,.5), inset 0 3px 0 rgba(255,255,255,.2);` },
+  { id: 'galaxy', name: 'Космос 🌌',   // звёзды медленно плывут
+    before: `background:
+      radial-gradient(circle at 30% 40%, #fff 0 1.2px, transparent 1.8px),
+      radial-gradient(circle at 70% 20%, #cfe8ff 0 1px, transparent 1.6px),
+      radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--c) 60%, #6a00ff), #110934 78%);
+      background-size:18px 18px, 26px 26px, auto;
+      animation:sk-drift 6s linear infinite;`,
+    keys: `@keyframes sk-drift{to{background-position:18px 18px, -26px 26px, 0 0}}` },
+  { id: 'bubble', name: 'Пузыри 🫧',   // пузырь всплывает и лопается
+    before: `background:color-mix(in srgb, var(--c) 25%, #141a3a);`,
+    after: `inset:12%;border-radius:50%;
+      background:radial-gradient(circle at 32% 28%, #fff 0 10%, transparent 24%),
+        radial-gradient(circle, color-mix(in srgb, var(--c) 35%, transparent) 0 58%, var(--c) 72%);
+      animation:sk-rise 3s ease-in infinite;animation-delay:calc(var(--i, 0) * -370ms);`,
+    keys: `@keyframes sk-rise{
+      0%{transform:translateY(30%) scale(.5);opacity:0} 20%{opacity:1}
+      85%{transform:translateY(-12%) scale(1);opacity:1}
+      100%{transform:translateY(-18%) scale(1.35);opacity:0}}` },
+  { id: 'heart', name: 'Сердечки 💖',
+    before: `background:linear-gradient(#ff9abb, #ff4f8b);box-shadow:inset 0 -4px 0 rgba(0,0,0,.2);`,
+    after: `content:'♥';display:flex;align-items:center;justify-content:center;color:#fff;
+      text-shadow:0 2px 4px rgba(150,0,60,.4);
+      animation:sk-beat 1s ease-in-out infinite;${W}` },
+  { id: 'matrix', name: 'Матрица',   // сверху вниз падает зелёная капля кода
+    host: 'overflow:hidden;',
+    before: `background:repeating-linear-gradient(90deg, transparent 0 5px, rgba(0,255,120,.12) 5px 6px),
+      linear-gradient(#001a0a, #003b17);
+      box-shadow:inset 0 0 0 1px #00ff88;`,
+    after: `inset:auto;left:0;right:0;top:0;height:45%;border-radius:0;
+      background:linear-gradient(transparent, rgba(0,255,136,.85));
+      animation:sk-drop 2.2s linear infinite;animation-delay:calc(var(--i, 0) * -330ms);`,
+    keys: `@keyframes sk-drop{from{transform:translateY(-110%)}to{transform:translateY(240%)}}` },
+  { id: 'pizza', name: 'Пицца 🍕',
+    before: `background:
+      radial-gradient(circle at 30% 34%, #c62828 0 13%, transparent 14%),
+      radial-gradient(circle at 70% 62%, #c62828 0 13%, transparent 14%),
+      radial-gradient(circle at 34% 76%, #2e7d32 0 5%, transparent 6%),
+      radial-gradient(circle at 72% 24%, #2e7d32 0 5%, transparent 6%),
+      linear-gradient(#ffd54f, #ffb300);
+      box-shadow:inset 0 0 0 3px #d9822b;` },
+];
+
+(function buildSkinCss() {
+  let css = `
+    @keyframes sk-twinkle{50%{opacity:.2;transform:scale(.5)}}
+    @keyframes sk-juicy{50%{transform:scale(.93) rotate(-4deg)}}
+    @keyframes sk-jiggle{0%,100%{transform:scale(1)}30%{transform:scale(1.12,.9)}60%{transform:scale(.94,1.06)}}
+    @keyframes sk-wobble{0%,100%{transform:scale(1)}30%{transform:scale(1.1,.88)}60%{transform:scale(.92,1.08)}}
+    @keyframes sk-shine{0%{background-position:100% 0,0 0}60%,100%{background-position:0% 0,0 0}}
+    @keyframes sk-hue{to{filter:hue-rotate(360deg)}}
+    @keyframes sk-spin{to{transform:rotate(360deg)}}
+    @keyframes sk-bob{50%{transform:translateY(-9%) scale(1.04)}}
+    @keyframes sk-glow{50%{filter:brightness(1.6) saturate(1.3)}}
+    @keyframes sk-beat{0%,100%{transform:scale(.85)}15%{transform:scale(1.15)}30%{transform:scale(.9)}45%{transform:scale(1.05)}}
+  `;
+  const target = ':is(.cell.block:not(.stone), .cell.preview, .cell.willclear, .pc.on)';
+  for (const s of SKINS) {
+    const sel = `.skin-${s.id} ${target}`;
+    if (s.host) css += `${sel}{${s.host}}`;
+    if (s.before) css += `${sel}::before{content:'';position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;${s.before}}`;
+    if (s.after) css += `${sel}::after{content:'';position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;${s.after}}`;
+    if (s.keys) css += s.keys;
+  }
+  const st = document.createElement('style');
+  st.textContent = css;
+  document.head.appendChild(st);
+})();
+
+let skinIdx = Math.max(0, SKINS.findIndex(s => s.id === localStorage.getItem('bp-skin')));
+// Стиль вешается на конкретные контейнеры, а не на всю страницу,
+// чтобы у игрока и у бота стили были независимыми
+function setSkinClass(el, i) {
+  SKINS.forEach(s => el.classList.remove('skin-' + s.id));
+  el.classList.add('skin-' + SKINS[i].id);
+}
+function applySkin(i) {
+  skinIdx = i;
+  ['board', 'tray', 'ghost'].forEach(id => setSkinClass(document.getElementById(id), i));
+  localStorage.setItem('bp-skin', SKINS[i].id);
+  Coll.add(SKINS[i].id);
+}
+function randomSkin() {
+  let i;
+  do { i = Math.floor(Math.random() * SKINS.length); } while (i === skinIdx);
+  return i;
+}
+
+// ---------- Уровни ----------
+// Генерируются по номеру: больше фруктов, больше видов, больше камней на старте
+function levelDef(n) {
+  const kinds = n <= 3 ? 1 : n <= 10 ? 2 : 3;
+  const start = (n * 2) % FRUITS.length;
+  const goals = [];
+  for (let k = 0; k < kinds; k++) {
+    const need = Math.max(3, 3 + Math.floor(n * 0.7) - k * 2);
+    goals.push({ f: FRUITS[(start + k) % FRUITS.length], need, left: need });
+  }
+  const stones = n < 3 ? 0 : Math.min(4 + n, 24);
+  return { goals, stones };
+}
+
+const save = {
+  get unlocked() { return +localStorage.getItem('bp-unlocked') || 1; },
+  set unlocked(v) { localStorage.setItem('bp-unlocked', v); },
+  get best() { return +localStorage.getItem('blockpuzzle-best') || 0; },
+  set best(v) { localStorage.setItem('blockpuzzle-best', v); },
+};
+
+// ---------- Состояние ----------
+let mode = 'classic', level = 1;
+let board, pieces, score, combo, goals = [], finished = false;
+
+const $ = id => document.getElementById(id);
+const $board = $('board'), $ghost = $('ghost'), $hud = $('hud');
+const $slots = [...document.querySelectorAll('.slot')];
+const $wrap = document.querySelector('.wrap');
+
+const cellEls = [];
+for (let i = 0; i < N * N; i++) {
+  const d = document.createElement('div');
+  d.className = 'cell';
+  d.style.setProperty('--i', (i % N) + Math.floor(i / N)); // диагональная волна
+  $board.appendChild(d);
+  cellEls.push(d);
+}
+
+const rand = n => Math.floor(Math.random() * n);
+
+// Фрукт для новой фигуры — из тех, что ещё нужно собрать (с весом по остатку)
+function pickFruit() {
+  const need = goals.filter(g => g.left > 0);
+  if (!need.length) return null;
+  let total = need.reduce((s, g) => s + g.left, 0), x = Math.random() * total;
+  for (const g of need) { if ((x -= g.left) < 0) return g.f; }
+  return need[0].f;
+}
+
+function newPiece(shape) {
+  const s = shape || SHAPES[rand(SHAPES.length)];
+  const p = { ...s, cells: s.cells.map(c => [c[0], c[1], null]), color: COLORS[rand(COLORS.length)] };
+  if (mode === 'arcade') {
+    let fruitsInPiece = Math.random() < 0.55 ? 1 : 0;
+    if (fruitsInPiece && p.cells.length >= 4 && Math.random() < 0.3) fruitsInPiece = 2;
+    const idx = p.cells.map((_, i) => i).sort(() => Math.random() - .5);
+    for (let k = 0; k < fruitsInPiece; k++) p.cells[idx[k]][2] = pickFruit();
+  }
+  return p;
+}
+
+function canPlace(b, p, r, c) {
+  return p.cells.every(([dr, dc]) => {
+    const rr = r + dr, cc = c + dc;
+    return rr >= 0 && rr < N && cc >= 0 && cc < N && !b[rr * N + cc];
+  });
+}
+function fitsAnywhere(b, p) {
+  for (let r = 0; r <= N - p.h; r++)
+    for (let c = 0; c <= N - p.w; c++)
+      if (canPlace(b, p, r, c)) return true;
+  return false;
+}
+function fullLines(b) {
+  const rows = [], cols = [];
+  for (let i = 0; i < N; i++) {
+    let rf = true, cf = true;
+    for (let j = 0; j < N; j++) {
+      if (!b[i * N + j]) rf = false;
+      if (!b[j * N + i]) cf = false;
+    }
+    if (rf) rows.push(i);
+    if (cf) cols.push(i);
+  }
+  return { rows, cols };
+}
+function lineCells({ rows, cols }) {
+  const s = new Set();
+  rows.forEach(r => { for (let c = 0; c < N; c++) s.add(r * N + c); });
+  cols.forEach(c => { for (let r = 0; r < N; r++) s.add(r * N + c); });
+  return s;
+}
+
+// ---------- Умная выдача фигур ----------
+// Подбираем тройку под текущее поле: фигуры закрывают почти полные линии,
+// плотно прилегают к блокам и гарантированно ставятся все три.
+const ASSIST = 0.8;      // доля «умных» слотов (остальные — случайные, но тоже влезают)
+const CANDIDATES = 14;   // сколько случайных фигур рассматриваем на слот
+
+function bestMove(b, p, all) {
+  let best = null;
+  for (let r = 0; r <= N - p.h; r++) {
+    for (let c = 0; c <= N - p.w; c++) {
+      if (!canPlace(b, p, r, c)) continue;
+      const pre = b.slice();
+      const mine = new Set();
+      p.cells.forEach(([dr, dc]) => { const i = (r + dr) * N + c + dc; pre[i] = 1; mine.add(i); });
+      const lines = fullLines(pre);
+      const nLines = lines.rows.length + lines.cols.length;
+      const post = pre.slice();
+      lineCells(lines).forEach(i => { post[i] = null; });
+
+      let s = nLines * 100 + (nLines > 1 ? nLines * 60 : 0);
+      // Насколько заполнены затронутые строки/столбцы
+      const rows = new Set(), cols = new Set();
+      mine.forEach(i => { rows.add(Math.floor(i / N)); cols.add(i % N); });
+      rows.forEach(rr => { let k = 0; for (let x = 0; x < N; x++) if (pre[rr * N + x]) k++; s += (k / N) ** 2 * 20; });
+      cols.forEach(cc => { let k = 0; for (let x = 0; x < N; x++) if (pre[x * N + cc]) k++; s += (k / N) ** 2 * 20; });
+      // Плотность: соседи-блоки и стены
+      mine.forEach(i => {
+        const rr = Math.floor(i / N), cc = i % N;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([a, d]) => {
+          const r2 = rr + a, c2 = cc + d;
+          if (r2 < 0 || r2 >= N || c2 < 0 || c2 >= N) s += 1.5;
+          else if (pre[r2 * N + c2] && !mine.has(r2 * N + c2)) s += 2.5;
+        });
+      });
+      // Штраф за «дырки» — пустые клетки, зажатые со всех сторон
+      mine.forEach(i => {
+        const rr = Math.floor(i / N), cc = i % N;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([a, d]) => {
+          const r2 = rr + a, c2 = cc + d;
+          if (r2 < 0 || r2 >= N || c2 < 0 || c2 >= N || post[r2 * N + c2]) return;
+          const closed = [[1, 0], [-1, 0], [0, 1], [0, -1]].every(([e, f]) => {
+            const r3 = r2 + e, c3 = c2 + f;
+            return r3 < 0 || r3 >= N || c3 < 0 || c3 >= N || post[r3 * N + c3];
+          });
+          if (closed) s -= 10;
+        });
+      });
+      const move = { r, c, score: s, lines: nLines, board: post };
+      if (all) all.push(move);
+      if (!best || s > best.score) best = move;
+    }
+  }
+  return best;
+}
+
+// ---------- «Джекпот»: фигуры под очистку 3+ линий ----------
+const BIG = ['###\n###\n###', '###\n###', '##\n##\n##', '##\n##'].map(s => RAW.indexOf(s));
+let setsSinceBig = 0; // сколько троек подряд без очистки 3+ линий — шанс растёт
+
+// Лучший ход фигуры, который чистит 3+ линии (или null)
+function bigClear(b, p) {
+  const all = [];
+  bestMove(b, p, all);
+  let best = null;
+  for (const m of all) {
+    if (m.lines < 3) continue;
+    if (!best || m.lines > best.lines || (m.lines === best.lines && m.score > best.score)) best = m;
+  }
+  return best;
+}
+
+// Ищем 1–2 фигуры, после которых можно сразу снять 3+ линии.
+// Возвращает { s: [индексы фигур по порядку], board } или null.
+function findJackpot(b) {
+  if (b.filter(Boolean).length < 8) return null; // на пустом поле это невозможно
+  const ids = SHAPES.map((_, i) => i);
+  const prefer = list => {
+    const big = list.filter(x => BIG.includes(x.s[x.s.length - 1]));
+    const pool = big.length && Math.random() < 0.75 ? big : list;
+    return pool[rand(pool.length)];
+  };
+
+  // Одна фигура сразу закрывает 3+ линии
+  let found = [];
+  for (const s of ids) {
+    const m = bigClear(b, SHAPES[s]);
+    if (m) found.push({ s: [s], board: m.board });
+  }
+  if (found.length) return prefer(found);
+
+  // Лучшие фигуры/позиции для «подготовки» поля
+  const topsOn = (bb, k, per) => ids.map(s => {
+    const all = [];
+    bestMove(bb, SHAPES[s], all);
+    all.sort((x, y) => y.score - x.score);
+    return { s, moves: all.slice(0, per) };
+  }).filter(x => x.moves.length)
+    .sort((x, y) => y.moves[0].score - x.moves[0].score)
+    .slice(0, k);
+
+  // Две фигуры: первая готовит поле, вторая сносит 3+
+  const tops = topsOn(b, 10, 3);
+  for (const A of tops)
+    for (const ma of A.moves)
+      for (const s of ids) {
+        const m = bigClear(ma.board, SHAPES[s]);
+        if (m) found.push({ s: [A.s, s], board: m.board });
+      }
+  if (found.length) return prefer(found);
+
+  // Три фигуры: две готовят, третья (большая или длинная линия) сносит 3+
+  const FIN = ids.filter(s => BIG.includes(s) || (SHAPES[s].h === 1 && SHAPES[s].w >= 3) || (SHAPES[s].w === 1 && SHAPES[s].h >= 3));
+  for (const A of tops.slice(0, 6))
+    for (const ma of A.moves.slice(0, 2))
+      for (const B of topsOn(ma.board, 6, 2))
+        for (const mb of B.moves)
+          for (const s of FIN) {
+            const m = bigClear(mb.board, SHAPES[s]);
+            if (m) found.push({ s: [A.s, B.s, s], board: m.board });
+          }
+  return found.length ? prefer(found) : null;
+}
+
+// b0 — поле, под которое подбираем; g — счётчик «джекпота» (у бота свой)
+function smartSet(b0 = board, g = null) {
+  let b = b0;
+  const chosen = [], used = new Set();
+
+  // Иногда (и чем дольше не было — тем чаще) кладём в тройку «джекпот»
+  const since = g ? g.since : setsSinceBig;
+  const chance = Math.min(0.9, 0.3 + since * 0.2);
+  if (Math.random() < chance) {
+    const j = findJackpot(b0);
+    if (j) { chosen.push(...j.s); j.s.forEach(s => used.add(s)); b = j.board; }
+  }
+  if (g) g.since++; else setsSinceBig++;
+
+  for (let k = chosen.length; k < 3; k++) {
+    const cands = [];
+    // Большие прямоугольники всегда среди кандидатов
+    const bigS = BIG[rand(BIG.length)];
+    if (!used.has(bigS)) {
+      used.add(bigS);
+      const m = bestMove(b, SHAPES[bigS]);
+      if (m) cands.push({ s: bigS, m });
+    }
+    for (let t = 0; t < CANDIDATES; t++) {
+      const s = rand(SHAPES.length);
+      if (used.has(s)) continue;
+      used.add(s);
+      const m = bestMove(b, SHAPES[s]);
+      if (m) cands.push({ s, m });
+    }
+    if (!cands.length) return null;
+    cands.sort((x, y) => y.m.score - x.m.score);
+    const pick = Math.random() < ASSIST
+      ? cands[rand(Math.min(3, cands.length))]   // одна из трёх лучших
+      : cands[rand(cands.length)];               // любая, что влезает
+    chosen.push(pick.s);
+    b = pick.m.board; // следующую фигуру подбираем уже под поле после этой
+  }
+  return chosen.sort(() => Math.random() - .5).map(s => newPiece(SHAPES[s]));
+}
+
+function refill() {
+  const smart = smartSet();
+  if (smart) { pieces = smart; return; }
+  let set;
+  for (let t = 0; t < 30; t++) {
+    set = [newPiece(), newPiece(), newPiece()];
+    if (set.some(p => fitsAnywhere(board, p))) break;
+  }
+  pieces = set;
+}
+
+// Камни с фруктами на старте уровня (без готовых линий)
+function seedStones(count) {
+  let placed = 0, tries = 0;
+  while (placed < count && tries++ < 500) {
+    const i = rand(N * N);
+    if (board[i]) continue;
+    board[i] = { c: STONE, f: Math.random() < 0.5 ? pickFruit() : null };
+    const l = fullLines(board);
+    if (l.rows.length || l.cols.length) { board[i] = null; continue; }
+    placed++;
+  }
+}
+
+// ---------- Отрисовка ----------
+function paintCell(el, cell) {
+  el.className = 'cell' + (cell ? ' block' : '') + (cell && cell.c === STONE ? ' stone' : '');
+  el.style.animationDelay = '';
+  el.style.setProperty('--c', cell ? cell.c : '');
+  el.textContent = cell && cell.f ? cell.f : '';
+}
+function renderBoard() { cellEls.forEach((el, i) => paintCell(el, board[i])); }
+
+function pieceEl(p, cls) {
+  const el = document.createElement('div');
+  el.style.gridTemplateColumns = `repeat(${p.w}, auto)`;
+  const map = new Map(p.cells.map(([r, c, f]) => [r * p.w + c, f]));
+  for (let i = 0; i < p.w * p.h; i++) {
+    const d = document.createElement('div');
+    d.className = 'pc' + (map.has(i) ? ' on' : '');
+    d.style.setProperty('--c', p.color);
+    d.style.setProperty('--i', i);
+    if (map.get(i)) d.textContent = map.get(i);
+    el.appendChild(d);
+  }
+  if (cls) el.className = cls;
+  return el;
+}
+
+function renderTray(animate) {
+  $slots.forEach((slot, i) => {
+    slot.innerHTML = '';
+    slot.onpointerdown = null;
+    const p = pieces[i];
+    if (!p) return;
+    const el = pieceEl(p, 'piece' + (fitsAnywhere(board, p) ? '' : ' nofit') + (animate ? ' appear' : ''));
+    if (animate) el.style.animationDelay = i * 90 + 'ms';
+    // Хватать можно за весь слот — на телефоне маленькие фигуры легко промахнуться
+    slot.onpointerdown = e => startDrag(e, i, el);
+    slot.appendChild(el);
+  });
+}
+
+function renderHud() {
+  if (mode === 'classic') {
+    $hud.innerHTML = `
+      <div class="stat"><span>Счёт</span><b id="score">${score}</b></div>
+      <div class="stat"><span>Рекорд</span><b id="best">${save.best}</b></div>`;
+  } else if (mode === 'duel' || mode === 'online') {
+    $hud.innerHTML = `
+      <div class="stat"><span>Ты</span><b id="score">${score}</b></div>
+      <div class="stat"><span>Время</span><b id="timer">3:00</b></div>
+      <div class="stat"><span>${mode === 'online' ? 'Соперник' : 'Бот 🤖'}</span><b id="botScoreHud">0</b></div>`;
+  } else {
+    $hud.innerHTML = `
+      <div class="stat"><span>Уровень</span><b>${level}</b></div>
+      <div class="goals">${goals.map((g, k) =>
+        `<div class="goal${g.left ? '' : ' ok'}" id="goal${k}"><span class="f">${g.f}</span><span class="n">${g.left}</span></div>`
+      ).join('')}</div>`;
+  }
+}
+
+// Счёт плавно «докручивается» до нового значения
+let shownScore = 0, tweenId = 0, bestAtStart = 0, recordShown = false;
+function updateScore() {
+  if (mode === 'arcade') return;
+  if (mode === 'classic') {
+    if (score > save.best) save.best = score;
+    $('best').textContent = save.best;
+  }
+  const el = $('score'), from = shownScore, to = score, t0 = performance.now();
+  cancelAnimationFrame(tweenId);
+  const step = now => {
+    const k = Math.min(1, (now - t0) / 450);
+    shownScore = Math.round(from + (to - from) * (1 - (1 - k) ** 3));
+    el.textContent = shownScore;
+    if (k < 1) tweenId = requestAnimationFrame(step);
+  };
+  tweenId = requestAnimationFrame(step);
+  if (to - from >= 10) { el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); }
+  if (mode === 'classic' && !recordShown && bestAtStart > 0 && score > bestAtStart) {
+    recordShown = true;
+    setTimeout(() => { SFX.record(); floatText('Новый рекорд!', '🏆', 3, true); }, 700);
+  }
+}
+
+// ---------- Эффекты ----------
+const fx = document.createElement('canvas');
+fx.id = 'fx';
+document.body.appendChild(fx);
+const ctx = fx.getContext('2d');
+let parts = [], fxRunning = false;
+function resizeFx() {
+  const d = devicePixelRatio || 1;
+  fx.width = innerWidth * d; fx.height = innerHeight * d;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+}
+resizeFx();
+addEventListener('resize', resizeFx);
+
+function burst(x, y, color, count, delay) {
+  setTimeout(() => {
+    for (let k = 0; k < count; k++) {
+      parts.push({
+        x, y, vx: (Math.random() - .5) * 7, vy: -Math.random() * 6 - 1,
+        s: 4 + Math.random() * 6, life: 1, color,
+        rot: Math.random() * 6, vr: (Math.random() - .5) * .4,
+      });
+    }
+    if (!fxRunning) fxLoop();
+  }, delay);
+}
+function fxLoop() {
+  fxRunning = true;
+  ctx.clearRect(0, 0, innerWidth, innerHeight);
+  parts = parts.filter(p => p.life > 0);
+  for (const p of parts) {
+    p.vy += .28; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life -= .02;
+    ctx.globalAlpha = Math.max(p.life, 0);
+    ctx.fillStyle = p.color;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+    ctx.fillRect(-p.s / 2, -p.s / 2, p.s, p.s);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  if (parts.length) requestAnimationFrame(fxLoop);
+  else { fxRunning = false; ctx.clearRect(0, 0, innerWidth, innerHeight); }
+}
+
+function shake(power) {
+  $wrap.style.setProperty('--s', power + 'px');
+  $wrap.classList.remove('shake'); void $wrap.offsetWidth; $wrap.classList.add('shake');
+}
+
+function deathAnim() {
+  cellEls.forEach((el, i) => {
+    if (!board[i]) return;
+    el.style.animationDelay = Math.floor(i / N) * 60 + 'ms';
+    el.classList.add('dead');
+  });
+  document.querySelectorAll('.piece').forEach(p => p.classList.add('nofit'));
+}
+
+// ---------- Перетаскивание ----------
+let drag = null, returnTimer = null;
+
+function startDrag(e, i, el) {
+  if (finished) return;
+  e.preventDefault();
+  SFX.pick(); buzz(8);
+  if (returnTimer) {
+    clearTimeout(returnTimer); returnTimer = null;
+    document.querySelectorAll('.piece.dragging').forEach(x => x.classList.remove('dragging'));
+  }
+  $ghost.style.transition = 'none';
+  $ghost.style.transformOrigin = '0 0';
+  const p = pieces[i];
+  $ghost.innerHTML = '';
+  const g = pieceEl(p);
+  $ghost.style.gridTemplateColumns = g.style.gridTemplateColumns;
+  [...g.children].forEach(ch => $ghost.appendChild(ch));
+  $ghost.style.display = 'grid';
+  el.classList.add('dragging');
+  drag = { i, p, el, lift: e.pointerType === 'touch' ? 70 : 0, pos: null };
+  moveDrag(e);
+}
+
+function moveDrag(e) {
+  if (!drag) return;
+  const gw = $ghost.offsetWidth, gh = $ghost.offsetHeight;
+  const left = e.clientX - gw / 2;
+  const top = e.clientY - gh / 2 - drag.lift;
+  $ghost.style.transform = `translate(${left}px, ${top}px)`;
+
+  const first = cellEls[0].getBoundingClientRect();
+  const step = first.width + parseFloat(getComputedStyle($board).gap);
+  const c = Math.round((left - first.left) / step);
+  const r = Math.round((top - first.top) / step);
+  drag.pos = canPlace(board, drag.p, r, c) ? [r, c] : null;
+  showPreview();
+}
+
+function showPreview() {
+  renderBoard();
+  if (!drag || !drag.pos) return;
+  const [r, c] = drag.pos, p = drag.p;
+  const tmp = board.slice();
+  p.cells.forEach(([dr, dc, f]) => {
+    const idx = (r + dr) * N + c + dc;
+    tmp[idx] = { c: p.color, f };
+    const el = cellEls[idx];
+    el.classList.add('preview');
+    el.style.setProperty('--c', p.color);
+    el.textContent = f || '';
+  });
+  lineCells(fullLines(tmp)).forEach(idx => {
+    cellEls[idx].classList.add('willclear');
+    cellEls[idx].style.setProperty('--c', p.color);
+  });
+}
+
+function endDrag() {
+  if (!drag) return;
+  const { i, p, pos, el } = drag;
+  drag = null;
+  if (pos && !finished) { $ghost.style.display = 'none'; place(i, p, pos[0], pos[1]); return; }
+  // Нельзя поставить — фигура уезжает обратно в слот
+  SFX.bad();
+  renderBoard();
+  const r = el.getBoundingClientRect();
+  const scale = el.firstChild.getBoundingClientRect().width / cellEls[0].getBoundingClientRect().width;
+  $ghost.style.transition = 'transform .2s ease-in';
+  $ghost.style.transform = `translate(${r.left + 6}px, ${r.top + 6}px) scale(${scale})`;
+  returnTimer = setTimeout(() => {
+    returnTimer = null;
+    $ghost.style.display = 'none';
+    el.classList.remove('dragging');
+  }, 200);
+}
+
+window.addEventListener('pointermove', moveDrag);
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+
+// ---------- Ход ----------
+function place(i, p, r, c) {
+  const placed = p.cells.map(([dr, dc, f]) => {
+    const idx = (r + dr) * N + c + dc;
+    board[idx] = { c: p.color, f };
+    return idx;
+  });
+  let gained = p.cells.length;
+
+  const lines = fullLines(board);
+  const cleared = lineCells(lines);
+  const n = lines.rows.length + lines.cols.length;
+  const old = {};
+  cleared.forEach(idx => { old[idx] = board[idx]; board[idx] = null; });
+  const perfect = n > 0 && board.every(x => !x);
+
+  SFX.place();
+  if (n > 0) {
+    combo++;
+    SFX.clear(n, combo);
+    buzz(n >= 3 ? [30, 40, 80] : 25);
+    if (n >= 3) SFX.mega();
+    const mega = n >= 3 ? 5 : 1; // 3+ линии за ход — очки ×5
+    const bonus = n * n * 10 * combo * mega;
+    gained += bonus;
+    if (perfect && mode !== 'arcade') gained += 300;
+    const praise = n >= 4 ? 'Невероятно!' : n === 3 ? 'Отлично!' : n === 2 ? 'Хорошо!' : '';
+    const sub = [];
+    if (mode !== 'arcade' && mega > 1) sub.push('×5!');
+    if (mode !== 'arcade' && praise) sub.push(praise);
+    if (combo > 1) sub.push(`Комбо ×${combo}`);
+    const main = mode !== 'arcade' ? `+${bonus}` : praise || sub.shift();
+    if (main) floatText(main, sub.join(' · '), n, mode === 'arcade');
+    if (perfect) setTimeout(() => { SFX.perfect(); floatText('Чистое поле!', mode !== 'arcade' ? '+300' : '✨', 4, true); }, 500);
+    if (n >= 2 || perfect) shake(2 + n * 2);
+    // 3 и больше линий за один ход — новый стиль блоков
+    if (n >= 3) {
+      setsSinceBig = 0;
+      const next = (skinIdx + 1) % SKINS.length; // стили идут по порядку
+      setTimeout(() => {
+        applySkin(next);
+        $board.classList.remove('flash'); void $board.offsetWidth; $board.classList.add('flash');
+        SFX.skin();
+        floatText('Новый стиль!', `${SKINS[next].name} · ${Coll.got().size}/${SKINS.length}`, 3, true);
+      }, 650);
+    }
+  } else {
+    combo = 0;
+    buzz(10);
+  }
+  score += gained;
+
+  // Приземление фигуры
+  renderBoard();
+  placed.forEach(idx => { if (!cleared.has(idx)) cellEls[idx].classList.add('land'); });
+
+  // Очистка волной от места установки + частицы + сбор фруктов
+  const cr = r + (p.h - 1) / 2, cc = c + (p.w - 1) / 2;
+  let maxDelay = 0;
+  cleared.forEach(idx => {
+    const el = cellEls[idx];
+    paintCell(el, old[idx]);
+    const delay = Math.round(Math.hypot(Math.floor(idx / N) - cr, idx % N - cc) * 40);
+    maxDelay = Math.max(maxDelay, delay);
+    el.style.animationDelay = delay + 'ms';
+    el.classList.add('clearing');
+    const b = el.getBoundingClientRect();
+    burst(b.left + b.width / 2, b.top + b.height / 2, old[idx].c, 5, delay);
+    const f = old[idx].f;
+    if (mode === 'arcade' && f) {
+      const k = goals.findIndex(g => g.f === f && g.left > 0);
+      if (k >= 0) { goals[k].left--; setTimeout(() => flyFruit(el, f, k), delay); }
+    }
+  });
+  if (cleared.size) setTimeout(() => (drag ? showPreview() : renderBoard()), maxDelay + 340);
+
+  pieces[i] = null;
+  const refilled = pieces.every(x => !x);
+  if (refilled) { refill(); SFX.refill(); }
+  renderTray(refilled);
+  updateScore();
+  // Онлайн: отправляем сопернику своё поле после каждого хода
+  sendState({ placed, cleared: [...cleared].map(i => [i, old[i].c]), gained: n > 0 ? gained : 0, n });
+
+  if (mode === 'arcade' && goals.every(g => g.left === 0)) {
+    finished = true;
+    if (save.unlocked <= level) save.unlocked = Math.min(level + 1, LEVEL_COUNT);
+    setTimeout(() => {
+      $('winText').textContent = `Уровень ${level} — все фрукты собраны`;
+      $('winNext').style.display = level < LEVEL_COUNT ? '' : 'none';
+      $('overWin').style.display = 'flex';
+      SFX.win(); buzz([40, 60, 40, 60, 120]);
+    }, 1100 + maxDelay);
+    return;
+  }
+
+  if (!pieces.some(x => x && fitsAnywhere(board, x))) {
+    // В дуэли не проигрываем — поле очищается, время идёт дальше
+    if (mode === 'duel' || mode === 'online') { setTimeout(() => stuckReset(false), maxDelay + 500); return; }
+    finished = true;
+    setTimeout(deathAnim, maxDelay + 400);
+    setTimeout(() => {
+      $('loseText').innerHTML = mode === 'classic'
+        ? `Счёт: <b>${score}</b>`
+        : `Осталось собрать: ${goals.filter(g => g.left).map(g => g.f + ' ' + g.left).join('  ')}`;
+      $('overLose').style.display = 'flex';
+      SFX.lose(); buzz(200);
+    }, maxDelay + 1400);
+  }
+}
+
+function flyFruit(fromEl, f, k) {
+  const target = $('goal' + k), g = goals[k];
+  if (!target || !g) return;
+  const a = fromEl.getBoundingClientRect(), b = target.querySelector('.f').getBoundingClientRect();
+  const d = document.createElement('div');
+  d.className = 'fly';
+  d.textContent = f;
+  document.body.appendChild(d);
+  const w = d.offsetWidth, h = d.offsetHeight;
+  d.style.transform = `translate(${a.left + a.width / 2 - w / 2}px, ${a.top + a.height / 2 - h / 2}px)`;
+  d.getBoundingClientRect();
+  d.style.transform = `translate(${b.left + b.width / 2 - w / 2}px, ${b.top + b.height / 2 - h / 2}px) scale(.8)`;
+  setTimeout(() => {
+    d.remove();
+    if (!target.isConnected) return; // уровень уже перезапущен
+    target.querySelector('.n').textContent = g.left;
+    target.classList.toggle('ok', g.left === 0);
+    target.classList.add('bump');
+    SFX.fruit();
+    setTimeout(() => target.classList.remove('bump'), 150);
+  }, 620);
+}
+
+function floatText(main, sub, size = 1, gold = false) {
+  const d = document.createElement('div');
+  d.className = 'float' + (gold ? ' gold' : '');
+  d.style.fontSize = 30 + size * 5 + 'px';
+  d.innerHTML = main + (sub ? `<small>${sub}</small>` : '');
+  $wrap.appendChild(d);
+  setTimeout(() => d.remove(), 1000);
+}
+
+// ---------- Экраны ----------
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
+  document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  if (id === 'menu' && typeof updateMenu === 'function') updateMenu();
+}
+
+function renderLevels() {
+  const grid = $('levelGrid');
+  grid.innerHTML = '';
+  const un = save.unlocked;
+  for (let n = 1; n <= LEVEL_COUNT; n++) {
+    const b = document.createElement('button');
+    b.className = 'lvl' + (n > un ? ' locked' : n < un ? ' done' : '');
+    b.textContent = n > un ? '🔒' : n;
+    if (n <= un) b.onclick = () => startGame('arcade', n);
+    grid.appendChild(b);
+  }
+}
+
+// ---------- Режим «Против бота» ----------
+const DUEL_TIME = 180;      // секунд
+const BOT_THINK = [1700, 3200]; // пауза бота между ходами, мс
+const BOT_MISTAKE = 0.15;   // шанс, что бот сходит не лучшим образом
+let duel = null, bot = null;
+
+const botEls = [];
+for (let i = 0; i < N * N; i++) {
+  const d = document.createElement('div');
+  d.className = 'cell';
+  d.style.setProperty('--i', (i % N) + Math.floor(i / N));
+  $('botBoard').appendChild(d);
+  botEls.push(d);
+}
+
+function refillBot() {
+  bot.pieces = smartSet(bot.board, bot.gen) || [newPiece(), newPiece(), newPiece()];
+}
+function renderBot(hi = -1) {
+  botEls.forEach((el, i) => paintCell(el, bot.board[i]));
+  const t = $('botTray');
+  t.innerHTML = '';
+  bot.pieces.forEach((p, i) => {
+    const slot = document.createElement('div');
+    slot.className = 'bslot';
+    if (p) slot.appendChild(pieceEl(p, 'piece' + (i === hi ? ' thinking' : '')));
+    t.appendChild(slot);
+  });
+  $('botScore').textContent = bot.score;
+  const h = $('botScoreHud');
+  if (h) h.textContent = bot.score;
+}
+function botFloat(text) {
+  const d = document.createElement('div');
+  d.className = 'botFloat';
+  d.textContent = text;
+  document.querySelector('.botWrap').appendChild(d);
+  setTimeout(() => d.remove(), 1000);
+}
+
+function scheduleBot() {
+  if (!duel) return;
+  $('botStatus').textContent = 'думает…';
+  duel.botTimer = setTimeout(botTurn, BOT_THINK[0] + Math.random() * (BOT_THINK[1] - BOT_THINK[0]));
+}
+
+function botTurn() {
+  if (!duel || finished) return;
+  const opts = [];
+  bot.pieces.forEach((p, i) => {
+    if (!p) return;
+    const all = [];
+    bestMove(bot.board, p, all);
+    all.forEach(m => opts.push({ ...m, i, p, v: m.lines * 1000 + m.score }));
+  });
+  if (!opts.length) { stuckReset(true); duel.botTimer = setTimeout(scheduleBot, 900); return; }
+  opts.sort((a, b) => b.v - a.v);
+  const move = Math.random() < BOT_MISTAKE ? opts[rand(opts.length)] : opts[0];
+  // Показываем, какую фигуру бот берёт, и через мгновение ставим
+  renderBot(move.i);
+  $('botStatus').textContent = 'ставит…';
+  duel.botTimer = setTimeout(() => {
+    if (!duel || finished) return;
+    applyBotMove(move);
+    scheduleBot();
+  }, 450);
+}
+
+function applyBotMove({ p, i, r, c }) {
+  const placed = p.cells.map(([dr, dc]) => {
+    const idx = (r + dr) * N + c + dc;
+    bot.board[idx] = { c: p.color, f: null };
+    return idx;
+  });
+  const lines = fullLines(bot.board), cleared = lineCells(lines);
+  const n = lines.rows.length + lines.cols.length;
+  const old = {};
+  cleared.forEach(idx => { old[idx] = bot.board[idx]; bot.board[idx] = null; });
+  let gained = p.cells.length;
+  if (n > 0) {
+    bot.combo++;
+    gained += n * n * 10 * bot.combo * (n >= 3 ? 5 : 1);
+    if (bot.board.every(x => !x)) gained += 300;
+    if (n >= 3) {
+      bot.gen.since = 0;
+      // У бота свой стиль — меняется только от его собственных 3+ линий
+      bot.skin = (bot.skin + 1) % SKINS.length;
+      setTimeout(() => { if (bot) { setSkinClass($('botPanel'), bot.skin); botFloat('новый стиль'); } }, 500);
+    }
+  } else bot.combo = 0;
+  bot.score += gained;
+
+  bot.pieces[i] = null;
+  if (bot.pieces.every(x => !x)) refillBot();
+  renderBot();
+  placed.forEach(idx => { if (!cleared.has(idx)) botEls[idx].classList.add('land'); });
+  cleared.forEach(idx => { paintCell(botEls[idx], old[idx]); botEls[idx].classList.add('clearing'); });
+  if (cleared.size) setTimeout(() => { if (bot) botEls.forEach((el, k) => paintCell(el, bot.board[k])); }, 360);
+  if (n > 0) { botFloat(`+${gained}` + (n >= 3 ? ' ×5' : '')); SFX.botClear(); }
+
+  if (!bot.pieces.some(x => x && fitsAnywhere(bot.board, x))) {
+    clearTimeout(duel.botTimer);
+    setTimeout(() => stuckReset(true), 600);
+    duel.botTimer = setTimeout(scheduleBot, 1500);
+  }
+}
+
+// Нет ходов в дуэли — поле очищается, игра продолжается
+function stuckReset(isBot) {
+  if (!duel || finished) return;
+  const els = isBot ? botEls : cellEls, b = isBot ? bot.board : board;
+  els.forEach((el, i) => {
+    if (!b[i]) return;
+    el.style.animationDelay = Math.floor(i / N) * 40 + 'ms';
+    el.classList.add('clearing');
+  });
+  if (isBot) botFloat('новое поле');
+  else { floatText('Нет ходов', 'новое поле', 2, true); SFX.stuck(); buzz(120); }
+  setTimeout(() => {
+    if (!duel) return;
+    if (isBot) {
+      bot.board = Array(N * N).fill(null); bot.combo = 0;
+      refillBot(); renderBot();
+    } else {
+      board.fill(null); combo = 0;
+      refill(); renderBoard(); renderTray(true);
+      sendState({ reset: true });
+    }
+  }, 700);
+}
+
+function updateTimer() {
+  const t = Math.max(0, duel.timeLeft), el = $('timer');
+  el.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  el.classList.toggle('hurry', t <= 10);
+  if (t <= 10 && t > 0) SFX.tick();
+}
+
+function startDuel() {
+  bot = { board: Array(N * N).fill(null), pieces: [], score: 0, combo: 0, gen: { since: 0 }, skin: 0 };
+  setSkinClass($('botPanel'), bot.skin);
+  refillBot(); renderBot();
+  duel = { timeLeft: DUEL_TIME };
+  updateTimer();
+  duel.timerId = setInterval(() => {
+    duel.timeLeft--;
+    updateTimer();
+    if (duel.timeLeft <= 0) endDuel();
+  }, 1000);
+  scheduleBot();
+}
+
+function stopDuel() {
+  if (!duel) return;
+  clearInterval(duel.timerId);
+  clearTimeout(duel.botTimer);
+  clearTimeout(duel.fallback);
+  duel = null;
+}
+
+function endDuel() {
+  stopDuel();
+  $('duelAgain').disabled = false;
+  $('duelAgain').style.display = '';
+  finished = true;
+  $('botStatus').textContent = 'время вышло';
+  const you = score, them = bot.score;
+  $('duelTitle').textContent = you > them ? 'Ты победил! 🏆' : you < them ? 'Бот победил 🤖' : 'Ничья 🤝';
+  $('duelText').innerHTML = `Ты <b>${you}</b> : <b>${them}</b> Бот`;
+  setTimeout(() => {
+    $('overDuel').style.display = 'flex';
+    if (you > them) { SFX.win(); buzz([40, 60, 40, 60, 120]); }
+    else if (you < them) { SFX.lose(); buzz(200); }
+    else SFX.record();
+  }, 500);
+}
+
+function startGame(m, n) {
+  stopDuel();
+  mode = m; level = n || 1;
+  document.body.classList.toggle('duel', mode === 'duel' || mode === 'online');
+  $('btnRestart').style.display = mode === 'online' ? 'none' : '';
+  $('botHead').textContent = '🤖 Бот';
+  board = Array(N * N).fill(null);
+  score = 0; combo = 0; finished = false;
+  shownScore = 0; bestAtStart = save.best; recordShown = false; setsSinceBig = 0;
+  goals = [];
+  if (mode === 'arcade') {
+    const def = levelDef(level);
+    goals = def.goals;
+    seedStones(def.stones);
+  }
+  refill();
+  show('game');
+  renderHud(); renderBoard(); renderTray(true);
+  if (mode === 'duel') startDuel();
+  if (mode === 'arcade') hintOnce('arcade', '🍓 Фрукты спрятаны в блоках.<br>Очищай линии с ними, чтобы выполнить задание сверху!');
+  if (mode === 'duel') hintOnce('duel', '⏱ У вас 3 минуты!<br>Набери больше очков, чем бот 🤖');
+}
+
+// ---------- Онлайн-бой ----------
+// Адрес сервера. Если игра открыта с сервера (http/https) — берётся тот же адрес сама.
+// Если игру открывают просто файлом — впиши сюда адрес VPS, например 'wss://game.example.com/ws'.
+const ONLINE_SERVER = '';
+
+function serverUrl() {
+  if (ONLINE_SERVER) return ONLINE_SERVER;
+  if (location.protocol === 'https:') return 'wss://' + location.host + '/ws';
+  if (location.protocol === 'http:') return 'ws://' + location.host + '/ws';
+  return null;
+}
+
+const Net = {
+  ws: null,
+  connect() {
+    return new Promise((resolve, reject) => {
+      const url = serverUrl();
+      if (!url) return reject(new Error('nourl'));
+      if (this.ws && this.ws.readyState === 1) return resolve();
+      if (this.ws) { try { this.ws.close(); } catch (e) {} }
+      const ws = new WebSocket(url);
+      this.ws = ws;
+      const to = setTimeout(() => { ws.close(); reject(new Error('timeout')); }, 6000);
+      ws.onopen = () => { clearTimeout(to); resolve(); };
+      ws.onerror = () => { clearTimeout(to); reject(new Error('error')); };
+      ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } onNet(m); };
+      ws.onclose = () => { if (this.ws === ws) { this.ws = null; onNet({ t: 'closed' }); } };
+    });
+  },
+  send(m) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); },
+};
+
+const isColor = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+let lobbyCode = null, oppName = 'Соперник';
+
+function lobbyStatus(text) { $('lobbyStatus').textContent = text || ''; }
+function lobbyView(waiting) {
+  $('lobbyMain').style.display = waiting ? 'none' : 'flex';
+  $('lobbyWait').style.display = waiting ? 'flex' : 'none';
+  $('nameInput').style.display = waiting ? 'none' : '';
+}
+function openOnline(joinCode) {
+  stopDuel();
+  $('nameInput').value = localStorage.getItem('bp-name') || '';
+  $('codeInput').value = joinCode || '';
+  lobbyView(false);
+  lobbyStatus(serverUrl() ? '' : 'Онлайн работает, когда игра открыта по ссылке с сервера');
+  show('online');
+  if (joinCode) joinRoom();
+}
+function playerName() {
+  const n = $('nameInput').value.trim().slice(0, 16);
+  localStorage.setItem('bp-name', n);
+  return n || 'Игрок';
+}
+async function ensureConnected() {
+  lobbyStatus('Подключаемся…');
+  try { await Net.connect(); lobbyStatus(''); return true; }
+  catch (e) { lobbyStatus(e.message === 'nourl' ? 'Онлайн работает, когда игра открыта по ссылке с сервера' : 'Сервер недоступен. Попробуй позже или сыграй с ботом 🤖'); return false; }
+}
+async function createRoom() {
+  if (!(await ensureConnected())) return;
+  Net.send({ t: 'create', name: playerName() });
+}
+async function joinRoom() {
+  const code = $('codeInput').value.replace(/\D/g, '');
+  if (code.length !== 4) { lobbyStatus('Введи код из 4 цифр'); return; }
+  if (!(await ensureConnected())) return;
+  Net.send({ t: 'join', code, name: playerName() });
+}
+function shareRoom() {
+  const link = location.protocol.startsWith('http') ? `${location.origin}${location.pathname}#join=${lobbyCode}` : '';
+  const text = `Го в «${GAME_NAME}» онлайн! Код комнаты: ${lobbyCode}` + (link ? `\n${link}` : '');
+  if (navigator.share) navigator.share({ text }).catch(() => {});
+  else if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => lobbyStatus('Скопировано — отправь другу'), () => {});
+}
+
+// Свой ход → сопернику
+function sendState(ev = {}) {
+  if (mode !== 'online' || !duel) return;
+  Net.send({
+    t: 'state', score, skin: skinIdx,
+    board: board.map(c => (c ? c.c : null)),
+    tray: pieces.map(p => (p ? { w: p.w, h: p.h, color: p.color, cells: p.cells.map(([r, c]) => [r, c]) } : null)),
+    ...ev,
+  });
+}
+
+// Ход соперника → на мини-поле
+function applyOpp(m) {
+  if (mode !== 'online' || !bot || !Array.isArray(m.board) || m.board.length !== N * N) return;
+  bot.board = m.board.map(c => (isColor(c) ? { c, f: null } : null));
+  bot.pieces = (Array.isArray(m.tray) ? m.tray.slice(0, 3) : []).map(p =>
+    p && isColor(p.color) && Array.isArray(p.cells)
+      ? { w: Math.min(5, p.w | 0), h: Math.min(5, p.h | 0), color: p.color, cells: p.cells.slice(0, 25).map(([r, c]) => [r | 0, c | 0, null]) }
+      : null);
+  bot.score = Math.max(0, m.score | 0);
+  if (Number.isInteger(m.skin) && m.skin >= 0 && m.skin < SKINS.length && m.skin !== bot.skin) {
+    bot.skin = m.skin; setSkinClass($('botPanel'), m.skin);
+  }
+  renderBot();
+  const cl = Array.isArray(m.cleared) ? m.cleared : [];
+  const clSet = new Set(cl.map(x => x[0]));
+  (Array.isArray(m.placed) ? m.placed : []).forEach(i => { if (!clSet.has(i) && botEls[i]) botEls[i].classList.add('land'); });
+  cl.forEach(([i, c]) => {
+    if (!botEls[i] || !isColor(c)) return;
+    paintCell(botEls[i], { c, f: null });
+    botEls[i].classList.add('clearing');
+  });
+  if (cl.length) setTimeout(() => { if (bot) botEls.forEach((el, k) => paintCell(el, bot.board[k])); }, 360);
+  if (m.n > 0) { botFloat(`+${m.gained | 0}` + (m.n >= 3 ? ' ×5' : '')); SFX.botClear(); }
+  if (m.reset) botFloat('новое поле');
+  $('botStatus').textContent = 'играет';
+}
+
+function countdown(ms, done) {
+  let n = Math.round(ms / 1000);
+  const token = duel;
+  const tickNum = () => {
+    if (duel !== token) return;
+    document.querySelectorAll('.countdown').forEach(e => e.remove());
+    const el = document.createElement('div');
+    el.className = 'countdown';
+    el.textContent = n > 0 ? n : 'Старт!';
+    if (n <= 0) el.style.fontSize = '64px';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 900);
+    if (n > 0) { SFX.tick(); buzz(15); n--; setTimeout(tickNum, 1000); }
+    else { SFX.skin(); buzz(40); done(); }
+  };
+  tickNum();
+}
+
+function startOnlineMatch(m) {
+  oppName = String(m.opponent || 'Соперник').slice(0, 16);
+  startGame('online');
+  bot = { board: Array(N * N).fill(null), pieces: [], score: 0, combo: 0, skin: 0 };
+  setSkinClass($('botPanel'), 0);
+  renderBot();
+  $('botHead').textContent = '🧑 ' + oppName;
+  $('botStatus').textContent = 'готовится…';
+  $('duelAgain').disabled = false;
+  duel = { online: true, timeLeft: Math.round(m.duration / 1000) };
+  updateTimer();
+  finished = true; // пока идёт отсчёт, ходить нельзя
+  countdown(m.countdown, () => {
+    finished = false;
+    duel.endAt = Date.now() + m.duration;
+    duel.timerId = setInterval(onlineTick, 250);
+    $('botStatus').textContent = 'играет';
+    sendState();
+  });
+}
+
+function onlineTick() {
+  if (!duel) return;
+  const t = Math.max(0, Math.ceil((duel.endAt - Date.now()) / 1000));
+  if (t !== duel.timeLeft) { duel.timeLeft = t; updateTimer(); }
+  if (t <= 0 && !finished) {
+    finished = true;
+    $('botStatus').textContent = 'подсчёт…';
+    // Итог объявляет сервер; если он не ответит — считаем по своим данным
+    duel.fallback = setTimeout(() => endOnline(score, bot ? bot.score : 0), 4500);
+  }
+}
+
+function endOnline(you, them, note) {
+  if (mode !== 'online') return;
+  stopDuel();
+  finished = true;
+  document.querySelectorAll('.countdown').forEach(e => e.remove());
+  $('botStatus').textContent = 'бой окончен';
+  $('duelTitle').textContent = note ? note : you > them ? 'Ты победил! 🏆' : you < them ? `${oppName} победил` : 'Ничья 🤝';
+  $('duelText').innerHTML = `Ты <b>${you}</b> : <b>${them}</b> ${oppName.replace(/[<>&]/g, '')}`;
+  $('duelAgain').disabled = !!note;
+  $('duelAgain').style.display = note ? 'none' : '';
+  setTimeout(() => {
+    $('overDuel').style.display = 'flex';
+    if (note || you > them) { SFX.win(); buzz([40, 60, 40, 60, 120]); }
+    else if (you < them) { SFX.lose(); buzz(200); }
+    else SFX.record();
+  }, 400);
+}
+
+// Сообщения от сервера
+function onNet(m) {
+  switch (m.t) {
+    case 'created':
+      lobbyCode = m.code;
+      $('bigCode').textContent = m.code;
+      lobbyView(true);
+      lobbyStatus('');
+      break;
+    case 'error':
+      lobbyView(false);
+      lobbyStatus(m.msg || 'Ошибка');
+      break;
+    case 'start':
+      $('overDuel').style.display = 'none';
+      $('duelAgain').style.display = '';
+      startOnlineMatch(m);
+      break;
+    case 'opp':
+      applyOpp(m);
+      break;
+    case 'oppRematch':
+      if ($('overDuel').style.display === 'flex')
+        $('duelText').insertAdjacentHTML('beforeend', `<br><small>${oppName.replace(/[<>&]/g, '')} хочет реванш!</small>`);
+      break;
+    case 'end':
+      endOnline(m.you | 0, m.them | 0);
+      break;
+    case 'oppLeft':
+      if (mode === 'online' && duel) endOnline(score, bot ? bot.score : 0, 'Соперник вышел — победа! 🏆');
+      else if (mode === 'online' && $('overDuel').style.display === 'flex') {
+        $('duelAgain').style.display = 'none';
+        $('duelText').insertAdjacentHTML('beforeend', '<br><small>Соперник ушёл</small>');
+      } else if ($('online').classList.contains('active')) { lobbyView(false); lobbyStatus('Соперник отключился'); }
+      break;
+    case 'closed':
+      if (mode === 'online' && duel) {
+        stopDuel(); finished = true;
+        $('duelTitle').textContent = 'Связь потеряна 📡';
+        $('duelText').innerHTML = `Ты <b>${score}</b> : <b>${bot ? bot.score : 0}</b> ${oppName.replace(/[<>&]/g, '')}`;
+        $('duelAgain').style.display = 'none';
+        $('overDuel').style.display = 'flex';
+      } else if ($('online').classList.contains('active')) { lobbyView(false); lobbyStatus('Связь с сервером потеряна'); }
+      break;
+  }
+}
+
+$('btnOnline').onclick = () => openOnline();
+$('btnCreate').onclick = createRoom;
+$('btnJoin').onclick = joinRoom;
+$('codeInput').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
+$('codeInput').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); });
+$('btnShare').onclick = shareRoom;
+$('btnCancel').onclick = () => { Net.send({ t: 'leave' }); lobbyView(false); lobbyStatus(''); };
+$('onlineBack').onclick = () => { Net.send({ t: 'leave' }); show('menu'); };
+
+// ---------- Логотип ----------
+function logoHTML() {
+  const pal = ['#ff5d5d', '#ffa93b', '#ffd84d', '#4fd67a', '#36c3ff', '#5d7bff', '#b45dff', '#ff6fc8'];
+  let k = 0;
+  const word = w => `<span class="w">${[...w].map(ch =>
+    `<span class="ch" style="--c:${pal[(k * 3) % pal.length]};--k:${k++}">${ch}</span>`).join('')}</span>`;
+  const icon = [1, 1, 1, 1, 0, 0, 1, 1, 1].map((on, i) =>
+    `<div class="cell${on ? ' block' : ''}" style="--c:${pal[i % pal.length]}"></div>`).join('');
+  return `<div class="logoIcon">${icon}</div><div class="logoText">${word('БЛОК')}${word('БУМ!')}</div>`;
+}
+$('splashLogo').innerHTML = logoHTML();
+$('menuLogo').innerHTML = logoHTML();
+
+// ---------- Заставка: блоки падают, средний ряд «взрывается» ----------
+(function splash() {
+  const pal = ['#ff5d5d', '#ffa93b', '#ffd84d', '#4fd67a', '#36c3ff', '#5d7bff', '#b45dff', '#ff6fc8'];
+  const grid = $('splashGrid');
+  const cells = [];
+  for (let i = 0; i < 16; i++) {
+    const d = document.createElement('div');
+    d.className = 'cell block';
+    d.style.setProperty('--c', pal[(i * 5) % pal.length]);
+    d.style.setProperty('--k', 15 - i);
+    grid.appendChild(d);
+    cells.push(d);
+  }
+  setTimeout(() => {
+    [4, 5, 6, 7, 8, 9, 10, 11].forEach((i, n) => {
+      const el = cells[i];
+      el.style.animationDelay = (n % 4) * 40 + 'ms';
+      el.classList.add('clearing');
+      const b = el.getBoundingClientRect();
+      burst(b.left + b.width / 2, b.top + b.height / 2, el.style.getPropertyValue('--c'), 6, (n % 4) * 40);
+    });
+  }, 1100);
+  let done = false;
+  $('splash').addEventListener('click', () => {
+    if (done) return;
+    done = true;
+    SFX.boom(); buzz(40);
+    // Ссылка-приглашение вида …#join=1234 — сразу в онлайн-лобби
+    const jm = location.hash.match(/join=(\d{4})/);
+    if (jm) { history.replaceState(null, '', location.pathname); openOnline(jm[1]); return; }
+    show('menu');
+    if (!localStorage.getItem('bp-tut')) setTimeout(() => openTutorial(), 250);
+  });
+})();
+
+// ---------- Настройки в меню ----------
+function refreshToggles() {
+  $('togSound').classList.toggle('off', !Settings.sound);
+  $('togMusic').classList.toggle('off', !Settings.music);
+  $('togVibro').classList.toggle('off', !Settings.vibro);
+  $('btnMute').textContent = (Settings.sound || Settings.music) ? '🔊' : '🔇';
+}
+if (!navigator.vibrate) $('togVibro').style.display = 'none'; // iPhone
+$('togSound').onclick = () => { Sound.setSound(!Settings.sound); refreshToggles(); };
+$('togMusic').onclick = () => { Sound.unlock(); Sound.setMusic(!Settings.music); refreshToggles(); };
+$('togVibro').onclick = () => { Settings.vibro = !Settings.vibro; refreshToggles(); buzz(40); };
+$('btnMute').onclick = () => {
+  const on = !(Settings.sound || Settings.music);
+  Sound.setSound(on); Sound.setMusic(on); refreshToggles();
+};
+refreshToggles();
+
+function updateMenu() {
+  const got = Coll.got(), seen = Coll.seen();
+  const hasNew = [...got].some(id => !seen.has(id));
+  $('collCount').innerHTML = `${got.size}/${SKINS.length}` + (hasNew ? '<span class="dot"></span>' : '');
+}
+
+// ---------- Обучение ----------
+const TUT = [
+  { t: 'Перетаскивай фигуры', x: 'Бери фигуру снизу и ставь на поле. Хватать можно за любое место вокруг фигуры.',
+    demo: el => {
+      const cells = [];
+      for (let i = 0; i < 20; i++) {
+        const on = [0, 1, 2, 5, 6, 10, 11, 12, 15, 16, 17, 19].includes(i);
+        cells.push(`<div class="cell${on ? ' block' : ''}" style="--c:#5d7bff"></div>`);
+      }
+      el.innerHTML = `<div class="dGrid">${cells.join('')}</div>
+        <div class="dPiece"><div class="cell block" style="--c:#ff6fc8"></div><div class="cell block" style="--c:#ff6fc8"></div></div>
+        <div class="dHand">👆</div>`;
+    } },
+  { t: 'Собирай линии', x: 'Заполни строку или столбец целиком — они исчезнут и дадут очки. Несколько ходов подряд — комбо!',
+    demo: el => {
+      const row = Array.from({ length: 8 }, (_, i) =>
+        `<div class="cell${i < 6 ? ' block' : ''}" style="--c:#36c3ff"></div>`).join('');
+      el.innerHTML = `<div class="dLine">${row}<div class="dDrop">
+        <div class="cell block" style="--c:#ffd84d"></div><div class="cell block" style="--c:#ffd84d"></div></div></div>`;
+    } },
+  { t: '3 линии сразу = ×5', x: 'Снеси 3 и больше линий одним ходом — очки ×5 и новый стиль блоков. Собери все 20!',
+    demo: el => {
+      const pal = ['#ff5d5d', '#36c3ff', '#4fd67a', '#ffd84d'];
+      el.innerHTML = `<div class="dX5">×5</div><div class="dSkins" id="dSkins">${pal.map((c, i) =>
+        `<div class="cell block" style="--c:${c};--i:${i}"></div>`).join('')}</div>`;
+      let k = 1;
+      const box = el.querySelector('#dSkins');
+      setSkinClass(box, k);
+      tutTimer = setInterval(() => { k = (k % (SKINS.length - 1)) + 1; setSkinClass(box, k); }, 1100);
+    } },
+  { t: 'Три режима', x: '<b>Классика</b> — играй на рекорд.<br><b>Аркада</b> — 30 уровней, собирай фрукты.<br><b>Против бота</b> — кто больше за 3 минуты.',
+    demo: el => { el.innerHTML = '<div class="dModes"><span>🏆</span><span>🍓</span><span>🤖</span></div>'; } },
+];
+let tutStep = 0, tutTimer = null;
+function renderTut() {
+  clearInterval(tutTimer);
+  const s = TUT[tutStep];
+  s.demo($('tutDemo'));
+  $('tutTitle').textContent = s.t;
+  $('tutText').innerHTML = s.x;
+  $('tutDots').innerHTML = TUT.map((_, i) => `<i class="${i === tutStep ? 'on' : ''}"></i>`).join('');
+  $('tutNext').textContent = tutStep === TUT.length - 1 ? 'Играть!' : 'Далее';
+  $('tutSkip').style.visibility = tutStep === TUT.length - 1 ? 'hidden' : '';
+  const card = document.querySelector('.tutCard');
+  card.style.animation = 'none'; void card.offsetWidth; card.style.animation = '';
+}
+function openTutorial() { tutStep = 0; renderTut(); $('tutorial').style.display = 'flex'; }
+function closeTutorial() {
+  clearInterval(tutTimer);
+  $('tutorial').style.display = 'none';
+  localStorage.setItem('bp-tut', '1');
+}
+$('tutNext').onclick = () => { if (tutStep < TUT.length - 1) { tutStep++; renderTut(); } else closeTutorial(); };
+$('tutSkip').onclick = closeTutorial;
+$('btnHelp').onclick = openTutorial;
+
+// Короткая подсказка при первом входе в режим
+function hintOnce(key, html) {
+  if (localStorage.getItem('bp-h-' + key)) return;
+  localStorage.setItem('bp-h-' + key, '1');
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const d = document.createElement('div');
+  d.className = 'toast';
+  d.innerHTML = html;
+  document.body.appendChild(d);
+  setTimeout(() => d.classList.add('out'), 4200);
+  setTimeout(() => d.remove(), 4700);
+}
+
+// ---------- Экран коллекции ----------
+function renderCollection() {
+  const got = Coll.got(), seen = Coll.seen();
+  const pal = ['#ff5d5d', '#36c3ff', '#4fd67a', '#ffd84d'];
+  $('collGrid').innerHTML = SKINS.map((s, i) => {
+    const open = got.has(s.id);
+    const cls = 'skinCard' + (open ? '' : ' locked') + (i === skinIdx ? ' current' : '') + (open && !seen.has(s.id) ? ' isNew' : '');
+    const cells = pal.map((c, k) => `<div class="cell block" style="--c:${c};--i:${k}"></div>`).join('');
+    return `<div class="${cls}"><div class="skinPrev skin-${open ? s.id : 'classic'}">${cells}</div>
+      ${open ? '' : '<span class="lock">🔒</span>'}<div class="nm">${open ? s.name : '???'}</div></div>`;
+  }).join('');
+  $('collText').textContent = `Собрано ${got.size} из ${SKINS.length}`;
+  requestAnimationFrame(() => { $('collBar').style.width = (got.size / SKINS.length * 100) + '%'; });
+  Coll.markSeen();
+}
+$('btnCollection').onclick = () => { $('collBar').style.width = '0'; renderCollection(); show('collection'); };
+
+// ---------- «Установить на телефон» ----------
+(function setupInstall() {
+  // Иконка рисуется кодом — отдельных файлов не нужно
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 512;
+  const g = cv.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 512, 512);
+  grd.addColorStop(0, '#2a3a8a'); grd.addColorStop(1, '#5a3fa8');
+  g.fillStyle = grd; g.fillRect(0, 0, 512, 512);
+  const pal = ['#ff5d5d', '#ffa93b', '#ffd84d', '#4fd67a', null, '#36c3ff', '#5d7bff', '#b45dff', '#ff6fc8'];
+  pal.forEach((c, i) => {
+    if (!c) return;
+    const x = 76 + (i % 3) * 124, y = 76 + Math.floor(i / 3) * 124;
+    g.fillStyle = c; g.beginPath(); g.roundRect ? g.roundRect(x, y, 112, 112, 22) : g.rect(x, y, 112, 112); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.3)'; g.fillRect(x + 14, y + 10, 84, 12);
+    g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(x + 8, y + 96, 96, 10);
+  });
+  g.font = '900 96px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#fff'; g.fillText('💥', 256, 262);
+  const png = cv.toDataURL('image/png');
+  const link = (rel, href) => { const l = document.createElement('link'); l.rel = rel; l.href = href; document.head.appendChild(l); };
+  link('icon', png);
+  link('apple-touch-icon', png);
+  if (location.protocol.startsWith('http')) {
+    const manifest = {
+      name: GAME_NAME, short_name: GAME_NAME, start_url: location.href.split('#')[0],
+      display: 'standalone', orientation: 'portrait', background_color: '#1d2757', theme_color: '#1d2757',
+      icons: [{ src: png, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }],
+    };
+    link('manifest', 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(manifest)));
+  }
+
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('btnInstall').style.display = ''; });
+  if (iOS && !standalone) $('btnInstall').style.display = '';
+  $('btnInstall').onclick = () => {
+    if (deferred) { deferred.prompt(); deferred = null; $('btnInstall').style.display = 'none'; return; }
+    hintOnce('ios-' + Date.now(), 'Чтобы установить игру: нажми <b>«Поделиться»</b> ⬆️<br>и выбери <b>«На экран Домой»</b>');
+  };
+})();
+
+applySkin(skinIdx);
+if (!localStorage.getItem('bp-seen')) Coll.markSeen(); // стартовая «Классика» — не новинка
+updateMenu();
+$('btnClassic').onclick = () => startGame('classic');
+$('btnArcade').onclick = () => { renderLevels(); show('levels'); };
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
+$('btnBack').onclick = () => {
+  stopDuel(); finished = true;
+  if (mode === 'online') { Net.send({ t: 'leave' }); show('menu'); return; }
+  if (mode === 'arcade') { renderLevels(); show('levels'); } else show('menu');
+};
+$('btnDuel').onclick = () => startGame('duel');
+$('duelAgain').onclick = () => {
+  if (mode !== 'online') return startGame('duel');
+  Net.send({ t: 'rematch' });
+  $('duelAgain').disabled = true;
+  $('duelText').insertAdjacentHTML('beforeend', '<br><small>Ждём соперника…</small>');
+};
+$('duelMenu').onclick = () => { if (mode === 'online') Net.send({ t: 'leave' }); show('menu'); };
+$('btnRestart').onclick = () => startGame(mode, level);
+$('loseRetry').onclick = () => startGame(mode, level);
+$('loseMenu').onclick = () => $('btnBack').onclick();
+$('winNext').onclick = () => startGame('arcade', level + 1);
+$('winMenu').onclick = () => { renderLevels(); show('levels'); };
+</script>
+</body>
+</html>
