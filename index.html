@@ -246,6 +246,12 @@
   .dGrid .cell{border-radius:4px}
   .dPiece{position:absolute;left:0;top:0;display:grid;grid-template-columns:18px;gap:2px;--cell:18px;
     animation:dMove 2.8s ease-in-out infinite}
+  #dragHint{position:fixed;left:0;top:0;font-size:40px;z-index:25;pointer-events:none;
+    filter:drop-shadow(0 4px 6px rgba(0,0,0,.4));animation:dragHint 2.2s ease-in-out infinite}
+  @keyframes dragHint{0%,12%{transform:translate(var(--x0),var(--y0)) scale(1);opacity:0}
+    18%{opacity:1;transform:translate(var(--x0),var(--y0)) scale(.85)}
+    70%{transform:translate(var(--x1),var(--y1)) scale(.85);opacity:1}
+    85%,100%{transform:translate(var(--x1),var(--y1)) scale(1);opacity:0}}
   .dHand{position:absolute;left:0;top:0;font-size:30px;animation:dHand 2.8s ease-in-out infinite}
   @keyframes dMove{0%,15%{transform:translate(83px,112px) scale(.7);opacity:1}55%,85%{transform:translate(111px,28px)}100%{transform:translate(111px,28px);opacity:0}}
   @keyframes dHand{0%,15%{transform:translate(88px,128px);opacity:1}55%{transform:translate(116px,44px);opacity:1}70%,100%{transform:translate(140px,90px);opacity:0}}
@@ -973,7 +979,11 @@ const ECON = {
 const SPRINT_TIME = 120; // секунд
 
 const Wallet = {
-  today() { return new Date().toISOString().slice(0, 10); },
+  // Местная дата: «новый день» наступает в полночь по часам игрока, а не по UTC
+  today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  },
   get balance() {
     const v = localStorage.getItem('bp-wallet');
     return v === null ? ECON.START_WALLET : +v;
@@ -1438,6 +1448,7 @@ let drag = null, returnTimer = null;
 
 function startDrag(e, i, el) {
   if (finished) return;
+  hideDragHint();
   e.preventDefault();
   SFX.pick(); buzz(8);
   if (returnTimer) {
@@ -1507,6 +1518,8 @@ function endDrag() {
     returnTimer = null;
     $ghost.style.display = 'none';
     el.classList.remove('dragging');
+    // Первый ход так и не сделан — снова показываем руку
+    if (!finished && !localStorage.getItem('bp-h-drag')) showDragHint();
   }, 200);
 }
 
@@ -1516,6 +1529,8 @@ window.addEventListener('pointercancel', endDrag);
 
 // ---------- Ход ----------
 function place(i, p, r, c) {
+  if (mode === 'sprint' && duel && !duel.timerId) runSprintClock();
+  if (!localStorage.getItem('bp-h-drag')) { localStorage.setItem('bp-h-drag', '1'); hideDragHint(); }
   const placed = p.cells.map(([dr, dc, f]) => {
     const idx = (r + dr) * N + c + dc;
     board[idx] = { c: p.color, f };
@@ -1659,6 +1674,7 @@ function floatText(main, sub, size = 1, gold = false) {
 
 // ---------- Экраны ----------
 function show(id) {
+  hideDragHint();
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
   document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
   document.querySelectorAll('.toast').forEach(t => t.remove());
@@ -1898,9 +1914,12 @@ function endDuel() {
 }
 
 // ---------- Режим «Забег»: 2 минуты на очки, награда в пуговках ----------
+// Часы идут с первого поставленного блока — новичок успевает осмотреться
 function startSprint() {
   duel = { timeLeft: SPRINT_TIME, sprint: true };
   updateTimer();
+}
+function runSprintClock() {
   duel.timerId = setInterval(() => {
     duel.timeLeft--;
     updateTimer();
@@ -1975,8 +1994,9 @@ function startGame(m, n) {
   if (mode === 'duel') startDuel();
   if (mode === 'sprint') {
     startSprint();
-    hintOnce('sprint', `⏱ 2 минуты — набери как можно больше очков!<br>Чем больше очков, тем больше ${PG} в награду`);
+    hintOnce('sprint', `⏱ 2 минуты пойдут с первого хода<br>Больше очков — больше ${PG} в награду`);
   }
+  if (!localStorage.getItem('bp-h-drag')) requestAnimationFrame(showDragHint);
   if (mode === 'arcade') hintOnce('arcade', '🍓 Фрукты спрятаны в блоках.<br>Очищай линии с ними, чтобы выполнить задание сверху!');
   if (mode === 'duel') hintOnce('duel', '⏱ У вас 3 минуты!<br>Набери больше очков, чем бот 🤖');
 }
@@ -2264,8 +2284,15 @@ $('menuLogo').innerHTML = logoHTML();
     // Ссылка-приглашение вида …#join=1234 — сразу в онлайн-лобби
     const jm = location.hash.match(/join=(\d{4})/);
     if (jm) { history.replaceState(null, '', location.pathname); openOnline(jm[1]); return; }
+    // Первый запуск: сразу в бесплатный забег — игрок играет уже через секунду.
+    // Полное обучение осталось в меню («Как играть»), а в игре подсказывает рука.
+    if (!localStorage.getItem('bp-tut') && Wallet.freeLeft() > 0) {
+      localStorage.setItem('bp-tut', '1');
+      updateMenu();
+      playSprint();
+      return;
+    }
     show('menu');
-    if (!localStorage.getItem('bp-tut')) setTimeout(() => openTutorial(), 250);
   });
 })();
 
@@ -2350,6 +2377,23 @@ function closeTutorial() {
 $('tutNext').onclick = () => { if (tutStep < TUT.length - 1) { tutStep++; renderTut(); } else closeTutorial(); };
 $('tutSkip').onclick = closeTutorial;
 $('btnHelp').onclick = openTutorial;
+
+// Рука «тянет» первую фигуру на поле, пока игрок не сделает первый ход
+function showDragHint() {
+  hideDragHint();
+  const i = pieces.findIndex(Boolean);
+  if (i < 0 || finished) return;
+  const from = $slots[i].getBoundingClientRect(), to = $board.getBoundingClientRect();
+  const h = document.createElement('div');
+  h.id = 'dragHint';
+  h.textContent = '👆';
+  h.style.setProperty('--x0', from.left + from.width / 2 - 14 + 'px');
+  h.style.setProperty('--y0', from.top + from.height / 2 - 6 + 'px');
+  h.style.setProperty('--x1', to.left + to.width / 2 - 14 + 'px');
+  h.style.setProperty('--y1', to.top + to.height / 2 - 6 + 'px');
+  document.body.appendChild(h);
+}
+function hideDragHint() { const h = document.getElementById('dragHint'); if (h) h.remove(); }
 
 // Короткая подсказка при первом входе в режим
 function hintOnce(key, html) {
