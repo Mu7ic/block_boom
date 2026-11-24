@@ -38,18 +38,35 @@
 
   /* ---------- Выбор уровня ---------- */
   #levels h2{margin:64px 0 18px}
-  #levelGrid{display:grid;grid-template-columns:repeat(5,58px);gap:12px}
-  .lvl{width:58px;height:58px;border-radius:14px;border:0;font:inherit;font-weight:800;font-size:20px;
-    background:#ffd84d;color:#1d2757;cursor:pointer;padding:0;margin:0;position:relative}
-  .lvl.done{background:#4fd67a}
-  .lvl.done::after{content:'✓';position:absolute;right:5px;top:2px;font-size:12px}
-  .lvl.locked{background:rgba(255,255,255,.1);color:rgba(255,255,255,.35);cursor:default}
+  /* Уровни — пуговицы: пройденные «пришиты» ниткой, следующая обведена пунктиром-ниткой */
+  #levelGrid{display:grid;grid-template-columns:repeat(5,58px);gap:30px 14px;padding-bottom:18px}
+  .lvl{--c:#ffd84d;width:58px;height:58px;border-radius:50%;border:0;font:inherit;padding:0;margin:0;position:relative;
+    cursor:pointer;color:#fff;background:var(--c);
+    box-shadow:inset 0 0 0 4px rgba(0,0,0,.14), inset 0 -5px 0 rgba(0,0,0,.12), 0 4px 0 rgba(0,0,0,.25);
+    transition:transform .12s}
+  .lvl:active{transform:scale(.92)}
+  .lvl::before{content:'';position:absolute;inset:31%;pointer-events:none;
+    background:radial-gradient(circle, rgba(0,0,0,.38) 0 2.8px, transparent 3.4px) 0 0/50% 50%}
+  .lvl .num{position:absolute;left:0;right:0;top:calc(100% + 6px);font-size:14px;font-weight:800;text-align:center}
+  /* Пройден: нитка крестиком через дырочки */
+  .lvl.done::after{content:'';position:absolute;inset:39.5%;pointer-events:none;
+    background:linear-gradient(45deg,transparent 41%,rgba(255,255,255,.85) 41% 59%,transparent 59%),
+               linear-gradient(-45deg,transparent 41%,rgba(255,255,255,.85) 41% 59%,transparent 59%)}
+  /* Открыт, но не пройден — «играешь» */
+  .lvl.cur{animation:breathe2 1.8s ease-in-out infinite;
+    box-shadow:inset 0 0 0 4px rgba(0,0,0,.14), inset 0 -5px 0 rgba(0,0,0,.12), 0 4px 0 rgba(0,0,0,.25), 0 0 0 4px rgba(255,255,255,.85)}
+  .lvl.locked{background:rgba(255,255,255,.07);box-shadow:none;cursor:default;color:rgba(255,255,255,.3)}
+  .lvl.locked::before{opacity:.35;filter:invert(1)}
   /* Следующий уровень, который можно купить за пуговки */
-  .lvl.buy{background:rgba(255,255,255,.16);color:#fff;font-size:15px;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;gap:2px;box-shadow:inset 0 0 0 2px #f07a4a;cursor:pointer}
-  .lvl.buy .cost{display:flex;align-items:center;gap:3px;font-size:13px}
-  .lvl.buy.poor{box-shadow:inset 0 0 0 2px rgba(255,255,255,.25);color:rgba(255,255,255,.6)}
-  .lvl.buy.confirm{background:#f07a4a;font-size:12px;animation:pulse .4s}
+  .lvl.buy{background:rgba(255,255,255,.1);box-shadow:none;outline:2.5px dashed #f07a4a;outline-offset:3px}
+  .lvl.buy::before{filter:invert(1);opacity:.6}
+  .lvl.buy .cost{position:absolute;top:-8px;right:-14px;display:flex;align-items:center;gap:3px;font-size:12px;font-weight:800;
+    background:#f07a4a;color:#fff;border-radius:999px;padding:2px 6px 2px 7px;box-shadow:0 2px 0 rgba(0,0,0,.25)}
+  .lvl.buy.poor{outline-color:rgba(255,255,255,.3)}
+  .lvl.buy.poor .cost{background:rgba(255,255,255,.2)}
+  .lvl.buy.confirm{background:#f07a4a;outline-style:solid;animation:pulse .4s}
+  .lvl.buy.confirm::before{display:none}
+  .lvl .ask{font-size:12px;font-weight:800}
   .lvlHint{margin-top:16px;font-size:14px;opacity:.75;text-align:center;max-width:320px}
 
   /* ---------- Игра ---------- */
@@ -343,7 +360,7 @@
     #tray{width:calc(var(--cell) * 8 + 30px);margin-top:16px}
     .overlay h2{font-size:30px;text-align:center;padding:0 16px}
     .overlay p{font-size:18px;text-align:center;padding:0 16px}
-    #levelGrid{grid-template-columns:repeat(5,min(58px, calc((100vw - 80px) / 5)));gap:10px}
+    #levelGrid{grid-template-columns:repeat(5,min(58px, calc((100vw - 110px) / 5)));gap:28px 14px}
     .lvl{width:auto;aspect-ratio:1;height:auto}
     .big{width:min(260px, 80vw);padding:13px 0;font-size:20px}
     .logoText{font-size:48px}
@@ -1656,22 +1673,25 @@ function renderLevels() {
   let hint = '';
   for (let n = 1; n <= LEVEL_COUNT; n++) {
     const b = document.createElement('button');
+    const num = `<span class="num">${n}</span>`;
+    b.setAttribute('aria-label', 'Уровень ' + n);
     if (n <= un && save.canPlayLevel(n)) {
-      b.className = 'lvl' + (n < un ? ' done' : '');
-      b.textContent = n;
+      b.className = 'lvl' + (n < un ? ' done' : ' cur');
+      if (n < un) b.style.setProperty('--c', COLORS[(n - 1) % COLORS.length]);
+      b.innerHTML = num;
       b.onclick = () => startGame('arcade', n);
     } else if (n === un) {
       // Следующий уровень: открыт по прогрессу, но его надо купить
       const price = ECON.levelPrice(n), poor = Wallet.balance < price;
       b.className = 'lvl buy' + (poor ? ' poor' : '');
-      b.innerHTML = `${n}<span class="cost">${price} ${PG}</span>`;
+      b.innerHTML = `${num}<span class="cost">${price} ${PG}</span>`;
       b.onclick = () => buyLevel(n, b);
       hint = poor
         ? `Уровень ${n} стоит ${price} ${PG}. Пуговки зарабатываются в Забеге`
         : `Уровень ${n} открывается за ${price} ${PG} — навсегда`;
     } else {
       b.className = 'lvl locked';
-      b.textContent = '🔒';
+      b.innerHTML = num;
     }
     grid.appendChild(b);
   }
@@ -1688,7 +1708,7 @@ function buyLevel(n, btn) {
   }
   if (!btn.classList.contains('confirm')) {
     btn.classList.add('confirm');
-    btn.innerHTML = `Купить?<span class="cost">${price} ${PG}</span>`;
+    btn.innerHTML = `<span class="ask">Купить?</span><span class="num">${n}</span><span class="cost">${price} ${PG}</span>`;
     setTimeout(() => { if (btn.isConnected && btn.classList.contains('confirm')) renderLevels(); }, 3000);
     return;
   }
