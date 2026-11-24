@@ -293,6 +293,40 @@
   @keyframes cdPop{0%{transform:translate(-50%,-50%) scale(2.2);opacity:0}25%{transform:translate(-50%,-50%) scale(1);opacity:1}
     80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.85);opacity:0}}
 
+  /* ---------- Пуговки: кошелёк, забег, награды ---------- */
+  .pg{display:inline-block;width:1em;height:1em;border-radius:50%;vertical-align:-.14em;flex:none;
+    background:
+      radial-gradient(circle at 37% 37%, #7a2a12 0 .07em, transparent .08em),
+      radial-gradient(circle at 63% 37%, #7a2a12 0 .07em, transparent .08em),
+      radial-gradient(circle at 37% 63%, #7a2a12 0 .07em, transparent .08em),
+      radial-gradient(circle at 63% 63%, #7a2a12 0 .07em, transparent .08em),
+      radial-gradient(circle, #f07a4a 0 .3em, #d9572a .31em .42em, #f07a4a .43em);
+    box-shadow:0 .06em 0 rgba(0,0,0,.3)}
+  .wallet{display:flex;align-items:center;gap:7px;background:rgba(0,0,0,.28);border-radius:999px;
+    padding:7px 14px 7px 9px;font-weight:800;font-size:18px;font-variant-numeric:tabular-nums}
+  .wallet.bump{animation:pulse .4s}
+  #menuWallet{position:fixed;top:calc(12px + var(--top));right:12px;z-index:5}
+  .big.sprintBtn{background:linear-gradient(135deg,#ffd84d,#ffa93b);width:min(280px, 84vw);padding:18px 0;font-size:24px;
+    box-shadow:0 6px 0 rgba(0,0,0,.25), 0 0 30px rgba(255,200,80,.35);animation:breathe2 2.4s ease-in-out infinite}
+  @keyframes breathe2{50%{transform:scale(1.04)}}
+  .big .price{display:inline-flex;align-items:center;gap:5px;margin-top:5px;background:rgba(29,39,87,.15);
+    border-radius:999px;padding:3px 12px;font-size:14px;font-weight:800;opacity:1}
+  .moreModes{font-size:13px;opacity:.55;text-transform:uppercase;letter-spacing:1.5px;margin-top:6px}
+  .stat b .pg{width:.8em;height:.8em}
+  #overSprint .res{display:flex;flex-direction:column;align-items:center;gap:6px;background:rgba(255,255,255,.07);
+    border-radius:20px;padding:16px 26px;min-width:min(300px, 86vw)}
+  .earn{display:flex;align-items:center;gap:10px;font-size:46px;font-weight:900;color:#ffd84d;
+    text-shadow:0 4px 0 rgba(0,0,0,.3)}
+  .earn .pg{width:44px;height:44px}
+  .tiers{display:flex;gap:4px;margin-top:6px}
+  .tiers i{display:flex;flex-direction:column;align-items:center;font-style:normal;font-size:11px;opacity:.45;
+    background:rgba(0,0,0,.25);border-radius:8px;padding:4px 6px;min-width:42px}
+  .tiers i b{font-size:14px}
+  .tiers i.got{opacity:1;background:rgba(79,214,122,.35)}
+  .nextTier{font-size:14px;opacity:.75}
+  .walletLine{font-size:15px;opacity:.8;display:flex;align-items:center;gap:6px}
+  #sprintAgain[disabled]{opacity:.45}
+
   /* ---------- Телефон ---------- */
   @media (max-width:700px){
     header{gap:28px;margin:50px 0 10px;min-height:56px}
@@ -349,7 +383,10 @@
 
 <!-- Меню -->
 <div class="screen" id="menu">
+  <div class="wallet" id="menuWallet" title="Ваши пуговки"><span class="pg"></span><span id="walletNum">0</span></div>
   <div class="logo small" id="menuLogo"></div>
+  <button class="big sprintBtn" id="btnSprint">Забег ⏱ 2 минуты<small id="sprintPrice"></small></button>
+  <div class="moreModes">Тренировка — без наград</div>
   <button class="big" id="btnClassic">Классика<small>играй на рекорд</small></button>
   <button class="big alt" id="btnArcade">Аркада<small>уровни с фруктами</small></button>
   <button class="big duelBtn" id="btnDuel">Против бота 🤖<small>кто больше за 3 минуты</small></button>
@@ -456,6 +493,20 @@
   <div class="row">
     <button class="ghost" id="duelMenu">Меню</button>
     <button id="duelAgain">Реванш</button>
+  </div>
+</div>
+<div class="overlay" id="overSprint">
+  <h2 id="sprintTitle">Время вышло! ⏱</h2>
+  <div class="res">
+    <p>Счёт: <b id="sprintScore">0</b></p>
+    <div class="earn">+<span id="sprintEarn">0</span><span class="pg"></span></div>
+    <div class="tiers" id="sprintTiers"></div>
+    <div class="nextTier" id="sprintNext"></div>
+  </div>
+  <div class="walletLine">На счёте: <span class="pg"></span><b id="sprintWallet">0</b></div>
+  <div class="row">
+    <button class="ghost" id="sprintMenu">Меню</button>
+    <button id="sprintAgain">Ещё раз</button>
   </div>
 </div>
 <div class="overlay" id="overWin">
@@ -863,9 +914,74 @@ function levelDef(n) {
 const save = {
   get unlocked() { return +localStorage.getItem('bp-unlocked') || 1; },
   set unlocked(v) { localStorage.setItem('bp-unlocked', v); },
+  get sprintBest() { return +localStorage.getItem('bp-sprint-best') || 0; },
+  set sprintBest(v) { localStorage.setItem('bp-sprint-best', v); },
   get best() { return +localStorage.getItem('blockpuzzle-best') || 0; },
   set best(v) { localStorage.setItem('blockpuzzle-best', v); },
 };
+
+// ---------- Экономика «Пуговок» ----------
+// Все числа — в одном месте, их же используем в пояснительной записке.
+const ECON = {
+  START_WALLET: 100,   // демо-баланс (в настоящей программе — баланс клиента)
+  FREE_PER_DAY: 1,     // бесплатных забегов в день
+  ENTRY: 10,           // цена платного забега, пуговок
+  // Награда по порогам очков. Зависит только от умения — случайных выигрышей нет.
+  TIERS: [
+    { at: 300, pay: 2 },
+    { at: 700, pay: 5 },
+    { at: 1200, pay: 8 },
+    { at: 2000, pay: 12 },
+    { at: 3000, pay: 16 },
+  ],
+  DAILY_CAP: 60,       // больше этого за сутки не начисляем
+};
+const SPRINT_TIME = 120; // секунд
+
+const Wallet = {
+  today() { return new Date().toISOString().slice(0, 10); },
+  get balance() {
+    const v = localStorage.getItem('bp-wallet');
+    return v === null ? ECON.START_WALLET : +v;
+  },
+  set balance(v) { localStorage.setItem('bp-wallet', Math.max(0, Math.round(v))); },
+  day() {
+    let d;
+    try { d = JSON.parse(localStorage.getItem('bp-day')); } catch (e) {}
+    if (!d || d.date !== this.today()) d = { date: this.today(), free: 0, earned: 0 };
+    return d;
+  },
+  saveDay(d) { localStorage.setItem('bp-day', JSON.stringify(d)); },
+  freeLeft() { return Math.max(0, ECON.FREE_PER_DAY - this.day().free); },
+  canPlay() { return this.freeLeft() > 0 || this.balance >= ECON.ENTRY; },
+  // Списывает вход. Возвращает 'free' | 'paid' | null (не хватает пуговок)
+  pay() {
+    const d = this.day();
+    if (d.free < ECON.FREE_PER_DAY) { d.free++; this.saveDay(d); return 'free'; }
+    if (this.balance < ECON.ENTRY) return null;
+    this.balance -= ECON.ENTRY;
+    return 'paid';
+  },
+  rewardFor(score) {
+    let pay = 0;
+    for (const t of ECON.TIERS) if (score >= t.at) pay = t.pay;
+    return pay;
+  },
+  // Начисляет награду с учётом дневного лимита. Возвращает фактически начисленное.
+  credit(n) {
+    const d = this.day();
+    const got = Math.max(0, Math.min(n, ECON.DAILY_CAP - d.earned));
+    d.earned += got; this.saveDay(d);
+    this.balance += got;
+    return got;
+  },
+};
+const PG = '<span class="pg"></span>';
+function priceHTML() {
+  const free = Wallet.freeLeft();
+  if (free > 0) return `<span class="price">🎁 бесплатно сегодня</span>`;
+  return `<span class="price">${ECON.ENTRY} ${PG}</span>`;
+}
 
 // ---------- Состояние ----------
 let mode = 'classic', level = 1;
@@ -1172,6 +1288,11 @@ function renderHud() {
     $hud.innerHTML = `
       <div class="stat"><span>Счёт</span><b id="score">${score}</b></div>
       <div class="stat"><span>Рекорд</span><b id="best">${save.best}</b></div>`;
+  } else if (mode === 'sprint') {
+    $hud.innerHTML = `
+      <div class="stat"><span>Счёт</span><b id="score">${score}</b></div>
+      <div class="stat"><span>Время</span><b id="timer">2:00</b></div>
+      <div class="stat"><span>Награда</span><b id="reward">0 ${PG}</b></div>`;
   } else if (mode === 'duel' || mode === 'online') {
     $hud.innerHTML = `
       <div class="stat"><span>Ты</span><b id="score">${score}</b></div>
@@ -1204,6 +1325,17 @@ function updateScore() {
   };
   tweenId = requestAnimationFrame(step);
   if (to - from >= 10) { el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse'); }
+  if (mode === 'sprint') {
+    const r = Wallet.rewardFor(score), el2 = $('reward');
+    if (el2 && +el2.dataset.v !== r) {
+      el2.dataset.v = r;
+      el2.innerHTML = `${r} ${PG}`;
+      if (r > 0) {
+        el2.classList.remove('pulse'); void el2.offsetWidth; el2.classList.add('pulse');
+        setTimeout(() => { SFX.record(); floatText(`Награда ${r}`, 'новый порог!', 2, true); }, 600);
+      }
+    }
+  }
   if (mode === 'classic' && !recordShown && bestAtStart > 0 && score > bestAtStart) {
     recordShown = true;
     setTimeout(() => { SFX.record(); floatText('Новый рекорд!', '🏆', 3, true); }, 700);
@@ -1446,7 +1578,7 @@ function place(i, p, r, c) {
 
   if (!pieces.some(x => x && fitsAnywhere(board, x))) {
     // В дуэли не проигрываем — поле очищается, время идёт дальше
-    if (mode === 'duel' || mode === 'online') { setTimeout(() => stuckReset(false), maxDelay + 500); return; }
+    if (mode === 'duel' || mode === 'online' || mode === 'sprint') { setTimeout(() => stuckReset(false), maxDelay + 500); return; }
     finished = true;
     setTimeout(deathAnim, maxDelay + 400);
     setTimeout(() => {
@@ -1689,11 +1821,68 @@ function endDuel() {
   }, 500);
 }
 
+// ---------- Режим «Забег»: 2 минуты на очки, награда в пуговках ----------
+function startSprint() {
+  duel = { timeLeft: SPRINT_TIME, sprint: true };
+  updateTimer();
+  duel.timerId = setInterval(() => {
+    duel.timeLeft--;
+    updateTimer();
+    if (duel.timeLeft <= 0) endSprint();
+  }, 1000);
+}
+
+function endSprint() {
+  stopDuel();
+  finished = true;
+  if (drag) endDrag();
+  const earned = Wallet.credit(Wallet.rewardFor(score));
+  if (score > save.sprintBest) save.sprintBest = score;
+  $('sprintScore').textContent = score;
+  $('sprintTitle').textContent = earned > 0 ? 'Отличный забег! 🎉' : 'Время вышло! ⏱';
+  $('sprintTiers').innerHTML = ECON.TIERS.map(t =>
+    `<i class="${score >= t.at ? 'got' : ''}"><b>${t.pay}</b>${t.at}</i>`).join('');
+  const next = ECON.TIERS.find(t => score < t.at);
+  const capHit = earned < Wallet.rewardFor(score);
+  $('sprintNext').innerHTML = capHit ? 'Дневной лимит наград исчерпан — приходите завтра'
+    : next ? `До награды ${next.pay} ${PG} не хватило ${next.at - score} очков`
+    : 'Максимальная награда! 👑';
+  $('sprintWallet').textContent = Wallet.balance;
+  refreshSprintAgain();
+  // Награда «докручивается» от 0
+  const el = $('sprintEarn');
+  el.textContent = '0';
+  setTimeout(() => {
+    $('overSprint').style.display = 'flex';
+    if (earned > 0) { SFX.win(); buzz([40, 60, 40, 60, 120]); } else SFX.record();
+    let k = 0;
+    const id = setInterval(() => {
+      el.textContent = ++k > earned ? earned : k;
+      if (k >= earned) clearInterval(id); else SFX.tick();
+    }, 70);
+  }, 600);
+}
+
+function refreshSprintAgain() {
+  const b = $('sprintAgain');
+  b.disabled = !Wallet.canPlay();
+  b.innerHTML = Wallet.freeLeft() > 0 ? 'Ещё раз · бесплатно'
+    : Wallet.canPlay() ? `Ещё раз · ${ECON.ENTRY} ${PG}` : 'Не хватает пуговок';
+}
+
+function playSprint() {
+  const how = Wallet.pay();
+  if (!how) { hintOnce('nomoney-' + Date.now(), `Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Потренируйтесь в Классике и приходите завтра за бесплатной попыткой`); return; }
+  startGame('sprint');
+  if (how === 'paid') floatText(`−${ECON.ENTRY}`, 'вход в забег', 1, true);
+}
+
 function startGame(m, n) {
   stopDuel();
   mode = m; level = n || 1;
   document.body.classList.toggle('duel', mode === 'duel' || mode === 'online');
-  $('btnRestart').style.display = mode === 'online' ? 'none' : '';
+  // В забеге «Заново» спрятан: каждая попытка — это вход (бесплатный или платный)
+  $('btnRestart').style.display = mode === 'online' || mode === 'sprint' ? 'none' : '';
   $('botHead').textContent = '🤖 Бот';
   board = Array(N * N).fill(null);
   score = 0; combo = 0; finished = false;
@@ -1708,6 +1897,10 @@ function startGame(m, n) {
   show('game');
   renderHud(); renderBoard(); renderTray(true);
   if (mode === 'duel') startDuel();
+  if (mode === 'sprint') {
+    startSprint();
+    hintOnce('sprint', `⏱ 2 минуты — набери как можно больше очков!<br>Чем больше очков, тем больше ${PG} в награду`);
+  }
   if (mode === 'arcade') hintOnce('arcade', '🍓 Фрукты спрятаны в блоках.<br>Очищай линии с ними, чтобы выполнить задание сверху!');
   if (mode === 'duel') hintOnce('duel', '⏱ У вас 3 минуты!<br>Набери больше очков, чем бот 🤖');
 }
@@ -2021,6 +2214,9 @@ function updateMenu() {
   const got = Coll.got(), seen = Coll.seen();
   const hasNew = [...got].some(id => !seen.has(id));
   $('collCount').innerHTML = `${got.size}/${SKINS.length}` + (hasNew ? '<span class="dot"></span>' : '');
+  $('walletNum').textContent = Wallet.balance;
+  const best = save.sprintBest;
+  $('sprintPrice').innerHTML = (best ? `награда в пуговках · рекорд ${best}` : 'награда в пуговках') + '<br>' + priceHTML();
 }
 
 // ---------- Обучение ----------
@@ -2053,8 +2249,8 @@ const TUT = [
       setSkinClass(box, k);
       tutTimer = setInterval(() => { k = (k % (SKINS.length - 1)) + 1; setSkinClass(box, k); }, 1100);
     } },
-  { t: 'Три режима', x: '<b>Классика</b> — играй на рекорд.<br><b>Аркада</b> — 30 уровней, собирай фрукты.<br><b>Против бота</b> — кто больше за 3 минуты.',
-    demo: el => { el.innerHTML = '<div class="dModes"><span>🏆</span><span>🍓</span><span>🤖</span></div>'; } },
+  { t: 'Забег за пуговки', x: '<b>Забег</b> — 2 минуты на очки, за пороги очков — пуговки. Первый забег в день бесплатный.<br>Классика, Аркада и бот — тренировка без наград.',
+    demo: el => { el.innerHTML = '<div class="dModes"><span>⏱</span><span class="pg" style="width:46px;height:46px"></span><span>🏆</span></div>'; } },
 ];
 let tutStep = 0, tutTimer = null;
 function renderTut() {
@@ -2156,6 +2352,13 @@ applySkin(skinIdx);
 if (!localStorage.getItem('bp-seen')) Coll.markSeen(); // стартовая «Классика» — не новинка
 updateMenu();
 $('btnClassic').onclick = () => startGame('classic');
+$('btnSprint').onclick = playSprint;
+$('sprintAgain').onclick = playSprint;
+$('sprintMenu').onclick = () => show('menu');
+// Конкурсная версия: онлайн-бой скрыт (голосующие играют в одиночку,
+// а внешний сервер не нужен для проверки). Вернуть — поставить true.
+const SHOW_ONLINE = false;
+if (!SHOW_ONLINE) $('btnOnline').style.display = 'none';
 $('btnArcade').onclick = () => { renderLevels(); show('levels'); };
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
 $('btnBack').onclick = () => {
