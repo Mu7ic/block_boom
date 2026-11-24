@@ -44,6 +44,13 @@
   .lvl.done{background:#4fd67a}
   .lvl.done::after{content:'✓';position:absolute;right:5px;top:2px;font-size:12px}
   .lvl.locked{background:rgba(255,255,255,.1);color:rgba(255,255,255,.35);cursor:default}
+  /* Следующий уровень, который можно купить за пуговки */
+  .lvl.buy{background:rgba(255,255,255,.16);color:#fff;font-size:15px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2px;box-shadow:inset 0 0 0 2px #f07a4a;cursor:pointer}
+  .lvl.buy .cost{display:flex;align-items:center;gap:3px;font-size:13px}
+  .lvl.buy.poor{box-shadow:inset 0 0 0 2px rgba(255,255,255,.25);color:rgba(255,255,255,.6)}
+  .lvl.buy.confirm{background:#f07a4a;font-size:12px;animation:pulse .4s}
+  .lvlHint{margin-top:16px;font-size:14px;opacity:.75;text-align:center;max-width:320px}
 
   /* ---------- Игра ---------- */
   header{display:flex;gap:40px;margin:52px 0 12px;align-items:flex-end;min-height:62px}
@@ -305,7 +312,7 @@
   .wallet{display:flex;align-items:center;gap:7px;background:rgba(0,0,0,.28);border-radius:999px;
     padding:7px 14px 7px 9px;font-weight:800;font-size:18px;font-variant-numeric:tabular-nums}
   .wallet.bump{animation:pulse .4s}
-  #menuWallet{position:fixed;top:calc(12px + var(--top));right:12px;z-index:5}
+  #menuWallet,#lvlWallet{position:fixed;top:calc(12px + var(--top));right:12px;z-index:5}
   .big.sprintBtn{background:linear-gradient(135deg,#ffd84d,#ffa93b);width:min(280px, 84vw);padding:18px 0;font-size:24px;
     box-shadow:0 6px 0 rgba(0,0,0,.25), 0 0 30px rgba(255,200,80,.35);animation:breathe2 2.4s ease-in-out infinite}
   @keyframes breathe2{50%{transform:scale(1.04)}}
@@ -439,8 +446,10 @@
 <!-- Выбор уровня -->
 <div class="screen" id="levels">
   <button class="corner l" data-go="menu">← Меню</button>
+  <div class="wallet" id="lvlWallet" title="Ваши пуговки"><span class="pg"></span><span id="lvlWalletNum">0</span></div>
   <h2>Выбери уровень</h2>
   <div id="levelGrid"></div>
+  <p class="lvlHint" id="lvlHint"></p>
 </div>
 
 <!-- Игра -->
@@ -913,7 +922,11 @@ function levelDef(n) {
 
 const save = {
   get unlocked() { return +localStorage.getItem('bp-unlocked') || 1; },
-  set unlocked(v) { localStorage.setItem('bp-unlocked', v); },
+  set unlocked(v) { localStorage.setItem('bp-unlocked', v); },   // следующий непройденный уровень
+  get owned() { try { return new Set(JSON.parse(localStorage.getItem('bp-owned') || '[]')); } catch (e) { return new Set(); } },
+  own(n) { const s = this.owned; s.add(n); localStorage.setItem('bp-owned', JSON.stringify([...s])); },
+  // Играть можно в бесплатные, купленные и уже пройденные уровни
+  canPlayLevel(n) { return n <= ECON.ARCADE_FREE || n < this.unlocked || this.owned.has(n); },
   get sprintBest() { return +localStorage.getItem('bp-sprint-best') || 0; },
   set sprintBest(v) { localStorage.setItem('bp-sprint-best', v); },
   get best() { return +localStorage.getItem('blockpuzzle-best') || 0; },
@@ -935,6 +948,10 @@ const ECON = {
     { at: 3000, pay: 16 },
   ],
   DAILY_CAP: 60,       // больше этого за сутки не начисляем
+  // Аркада: уровень покупается навсегда, после прохождения предыдущего.
+  // Аркада пуговок не даёт — их зарабатывают только в Забеге.
+  ARCADE_FREE: 3,      // первые уровни бесплатные
+  levelPrice(n) { return n <= this.ARCADE_FREE ? 0 : n <= 12 ? 5 : n <= 24 ? 10 : 15; },
 };
 const SPRINT_TIME = 120; // секунд
 
@@ -1635,13 +1652,52 @@ function renderLevels() {
   const grid = $('levelGrid');
   grid.innerHTML = '';
   const un = save.unlocked;
+  $('lvlWalletNum').textContent = Wallet.balance;
+  let hint = '';
   for (let n = 1; n <= LEVEL_COUNT; n++) {
     const b = document.createElement('button');
-    b.className = 'lvl' + (n > un ? ' locked' : n < un ? ' done' : '');
-    b.textContent = n > un ? '🔒' : n;
-    if (n <= un) b.onclick = () => startGame('arcade', n);
+    if (n <= un && save.canPlayLevel(n)) {
+      b.className = 'lvl' + (n < un ? ' done' : '');
+      b.textContent = n;
+      b.onclick = () => startGame('arcade', n);
+    } else if (n === un) {
+      // Следующий уровень: открыт по прогрессу, но его надо купить
+      const price = ECON.levelPrice(n), poor = Wallet.balance < price;
+      b.className = 'lvl buy' + (poor ? ' poor' : '');
+      b.innerHTML = `${n}<span class="cost">${price} ${PG}</span>`;
+      b.onclick = () => buyLevel(n, b);
+      hint = poor
+        ? `Уровень ${n} стоит ${price} ${PG}. Пуговки зарабатываются в Забеге`
+        : `Уровень ${n} открывается за ${price} ${PG} — навсегда`;
+    } else {
+      b.className = 'lvl locked';
+      b.textContent = '🔒';
+    }
     grid.appendChild(b);
   }
+  if (!hint) hint = 'Пройди уровень, чтобы открыть следующий';
+  $('lvlHint').innerHTML = hint;
+}
+
+// Покупка в два нажатия: первое показывает «Купить?», второе списывает пуговки
+function buyLevel(n, btn) {
+  const price = ECON.levelPrice(n);
+  if (Wallet.balance < price) {
+    toast(`Не хватает пуговок: уровень ${n} стоит ${price} ${PG}<br>Заработайте их в Забеге`);
+    return;
+  }
+  if (!btn.classList.contains('confirm')) {
+    btn.classList.add('confirm');
+    btn.innerHTML = `Купить?<span class="cost">${price} ${PG}</span>`;
+    setTimeout(() => { if (btn.isConnected && btn.classList.contains('confirm')) renderLevels(); }, 3000);
+    return;
+  }
+  Wallet.balance -= price;
+  save.own(n);
+  SFX.win(); buzz([30, 40, 60]);
+  renderLevels();
+  const w = $('lvlWallet'); w.classList.remove('bump'); void w.offsetWidth; w.classList.add('bump');
+  toast(`Уровень ${n} открыт!`);
 }
 
 // ---------- Режим «Против бота» ----------
@@ -1872,7 +1928,7 @@ function refreshSprintAgain() {
 
 function playSprint() {
   const how = Wallet.pay();
-  if (!how) { hintOnce('nomoney-' + Date.now(), `Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Потренируйтесь в Классике и приходите завтра за бесплатной попыткой`); return; }
+  if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Потренируйтесь в Классике и приходите завтра за бесплатной попыткой`); return; }
   startGame('sprint');
   if (how === 'paid') floatText(`−${ECON.ENTRY}`, 'вход в забег', 1, true);
 }
@@ -2279,6 +2335,9 @@ $('btnHelp').onclick = openTutorial;
 function hintOnce(key, html) {
   if (localStorage.getItem('bp-h-' + key)) return;
   localStorage.setItem('bp-h-' + key, '1');
+  toast(html);
+}
+function toast(html) {
   document.querySelectorAll('.toast').forEach(t => t.remove());
   const d = document.createElement('div');
   d.className = 'toast';
@@ -2377,7 +2436,11 @@ $('duelMenu').onclick = () => { if (mode === 'online') Net.send({ t: 'leave' });
 $('btnRestart').onclick = () => startGame(mode, level);
 $('loseRetry').onclick = () => startGame(mode, level);
 $('loseMenu').onclick = () => $('btnBack').onclick();
-$('winNext').onclick = () => startGame('arcade', level + 1);
+// Следующий уровень может быть ещё не куплен — тогда ведём на экран уровней
+$('winNext').onclick = () => {
+  if (save.canPlayLevel(level + 1)) startGame('arcade', level + 1);
+  else { renderLevels(); show('levels'); }
+};
 $('winMenu').onclick = () => { renderLevels(); show('levels'); };
 </script>
 </body>
