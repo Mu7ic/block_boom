@@ -198,6 +198,13 @@
     90%,100%{transform:translate(var(--x1),var(--y1)) scale(1);opacity:0}}
   @keyframes handTap{0%,100%{transform:translate(var(--x0),var(--y0)) scale(1)}
     45%{transform:translate(var(--x0),var(--y0)) scale(.8)}}
+
+  /* Задание дня */
+  .card .dRow + .dRow{margin-top:8px}
+  .dRow.ok > span:nth-child(2){opacity:.6;text-decoration:line-through}
+  .dRow .rw{margin-left:auto;display:flex;align-items:center;gap:4px;font-weight:800;flex:none}
+  .taskLine{font-size:14px;text-align:center;max-width:300px;line-height:1.35}
+  .taskLine.ok{color:#2f9a77;font-weight:700}
 </style>
 </head>
 <body>
@@ -260,6 +267,7 @@
     <div class="earn">+<span id="overEarn">0</span><span class="pg"></span></div>
     <div class="tiers" id="overTiers"></div>
     <div class="nextTier" id="overNext"></div>
+    <div class="taskLine" id="overTask"></div>
   </div>
   <div class="walletLine">На счёте: <span class="pg"></span><b id="overWallet">0</b></div>
   <div class="row">
@@ -643,6 +651,7 @@ function endRun(why) {
   $('score').textContent = G.S.score;
   const sc = G.S.score;
   const earned = Wallet.credit(Wallet.rewardFor(sc));
+  const taskRes = Task.check({ score: sc, golds: G.S.golds, merges: G.S.merges });
   const isBest = sc > save.best;
   if (isBest) save.best = sc;
   $('overTitle').textContent = earned > 0 ? 'Блестяще! ✨' : 'Время вышло! ⏱';
@@ -654,6 +663,7 @@ function endRun(why) {
   const next = ECON.TIERS.find(t => sc < t.at), capHit = earned < Wallet.rewardFor(sc);
   $('overNext').innerHTML = capHit ? 'Дневной лимит наград исчерпан — приходите завтра'
     : next ? `До награды ${next.pay} ${PG} не хватило ${next.at - sc} очков` : 'Максимальная награда! 👑';
+  const tl = taskLineHTML(taskRes); $('overTask').className = tl.cls; $('overTask').innerHTML = tl.html;
   $('overWallet').textContent = Wallet.balance;
   const again = $('overAgain');
   again.disabled = !Wallet.canPlay();
@@ -687,6 +697,7 @@ function renderMenu() {
   const sub = Streak.bonusToday() ? 'сегодня +1 бесплатный забег 🎁'
     : Streak.playedToday() ? `ещё ${need - n} дн. до +1 бесплатного забега` : `сыграй сегодня — до бонуса ${need - n} дн.`;
   $('streakCard').innerHTML = `<div class="dRow"><span class="ic">🔥</span><span>Серия: ${n} дн.<span class="dots3">${dots}</span><small>${sub}</small></span></div>`;
+  $('streakCard').innerHTML += taskRowHTML();
   renderFabrics();
 }
 function renderFabrics() {
@@ -728,6 +739,8 @@ function renderRules() {
       <table>${lv}</table></div>
     <div class="rcard"><h3>📅 Набор дня</h3><ul>
       <li>Какие пуговицы и куда падают — <b>одинаково для всех</b> в этот день (если играть одинаково).</li></ul></div>
+    <div class="rcard"><h3>🎯 Задание дня</h3><ul>
+      <li>Одно задание в день, одинаковое для всех, — проверяется по итогам забега: +${TASK_REWARD} ${PG} (в пределах дневного лимита).</li></ul></div>
     <div class="rcard"><h3>🎟 Вход</h3><ul>
       <li><b>${ECON.FREE_PER_DAY} бесплатный забег в день</b>, дальше — ${ECON.ENTRY} ${PG}.</li>
       <li>Играешь ${ECON.STREAK_DAYS} дня подряд и дольше — каждый день +1 бесплатный забег.</li></ul></div>
@@ -764,6 +777,38 @@ $('btnReset').onclick = () => {
 })();
 
 applyFabric();
+// ---------- Задание дня ----------
+// Одно на день, одинаковое для всех (выбирается по дате). Проверяется по итогам забега.
+// Награда — TASK_REWARD пуговок, один раз в день, внутри дневного лимита.
+const TASK_REWARD = 5;
+const TASKS = [
+  { text: 'Собери золотую пуговицу 👑',      ok: s => s.golds >= 1 },
+  { text: 'Сделай 55 слияний',              ok: s => s.merges >= 55 },
+  { text: 'Две золотые за забег',           ok: s => s.golds >= 2 },
+  { text: 'Набери 6000 очков',              ok: s => s.score >= 6000 },
+];
+const Task = {
+  today() { let h = 0; for (const ch of 'task-' + dateKey()) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return TASKS[h % TASKS.length]; },
+  done() { return !!Wallet.day().task; },
+  check(st) {
+    const t = this.today();
+    if (this.done()) return { t, already: true };
+    if (!t.ok(st)) return { t, ok: false };
+    const d = Wallet.day(); d.task = true; Wallet.saveDay(d);
+    return { t, ok: true, got: Wallet.credit(TASK_REWARD) };
+  },
+};
+function taskRowHTML() {
+  const t = Task.today(), done = Task.done();
+  return `<div class="dRow${done ? ' ok' : ''}"><span class="ic">${done ? '✅' : '🎯'}</span>
+    <span>${t.text}<small>задание дня</small></span><span class="rw">+${TASK_REWARD} ${PG}</span></div>`;
+}
+function taskLineHTML(r) {
+  if (r.already) return { cls: 'taskLine', html: '✅ Задание дня уже выполнено сегодня' };
+  if (r.ok) return { cls: 'taskLine ok', html: r.got > 0 ? `✅ Задание дня выполнено: «${r.t.text}» · +${r.got} ${PG}` : `✅ Задание дня выполнено — дневной лимит наград уже набран` };
+  return { cls: 'taskLine', html: `🎯 Задание дня: «${r.t.text}» — пока не выполнено` };
+}
+
 // ---------- Первый запуск: сразу в игру, рука показывает, что делать ----------
 // Бесплатная попытка списывается только при первом касании — открыл и ушёл в меню, попытка цела.
 function onFirstStart() {

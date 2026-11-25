@@ -1867,6 +1867,13 @@ function runSprintClock() {
     if (run.timeLeft <= 0) endSprint();
   }, 1000);
 }
+// Свернули приложение или ушли на другую вкладку (звонок, сообщение) — часы забега на паузе,
+// чтобы игрок не терял время. Вернулся — время идёт дальше.
+document.addEventListener('visibilitychange', () => {
+  if (!run) return;
+  if (document.hidden && run.timerId) { clearInterval(run.timerId); run.timerId = null; run.paused = true; }
+  else if (!document.hidden && run.paused && !finished) { run.paused = false; runSprintClock(); }
+});
 
 function endSprint() {
   const lines = run ? run.lines || 0 : 0;
