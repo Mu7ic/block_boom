@@ -157,32 +157,6 @@
   .overlay h2{margin:0;font-size:36px;animation:appear .5s cubic-bezier(.3,1.6,.6,1)}
   .overlay p{margin:0;font-size:20px;opacity:.85}
   .overlay .row{display:flex;gap:12px}
-  /* ---------- Против бота ---------- */
-  .big.duelBtn{background:#ff8fc8}
-  #arena{display:flex;gap:16px;align-items:flex-start}
-  #botPanel{display:none;flex-direction:column;align-items:center;gap:6px;
-    --cell:15px;--gap:2px;--mini:7px;
-    background:rgba(0,0,0,.22);border-radius:14px;padding:10px}
-  body.duel #botPanel{display:flex}
-  body.duel{
-    --cell:min(44px, calc((100vw - 200px) / 8), calc((100vh - 190px) / 11.4));
-    --cell:min(44px, calc((100vw - 200px) / 8), calc((100dvh - 190px) / 11.4));
-    --mini:calc(var(--cell) * .5)}
-  .botHead{font-size:13px;opacity:.75;text-transform:uppercase;letter-spacing:1px}
-  .botScore{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
-  .botWrap{position:relative}
-  #botBoard{display:grid;grid-template-columns:repeat(8,var(--cell));gap:var(--gap);
-    padding:4px;background:#121a3c;border-radius:8px}
-  #botBoard .cell{border-radius:3px;font-size:0}
-  #botTray{display:flex;gap:6px;height:34px;align-items:center}
-  #botTray .bslot{width:40px;display:flex;justify-content:center}
-  #botTray .piece{padding:1px;cursor:default;gap:1px}
-  #botTray .piece .pc{border-radius:2px}
-  #botTray .piece.thinking{animation:think .45s ease-in-out}
-  @keyframes think{50%{transform:scale(1.4)}}
-  .botStatus{font-size:11px;opacity:.55;height:14px}
-  .botFloat{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);font-weight:800;font-size:18px;
-    pointer-events:none;white-space:nowrap;text-shadow:0 2px 6px rgba(0,0,0,.6);animation:rise 1s ease-out forwards}
   #timer.hurry{color:#ffd84d}
 
   button{
@@ -274,6 +248,7 @@
     padding:14px 18px;border-radius:16px;font-size:15px;line-height:1.4;width:max-content;max-width:86vw;text-align:center;
     z-index:30;pointer-events:none;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:toastIn .35s cubic-bezier(.3,1.5,.6,1)}
   .toast.out{animation:fadeOut .4s forwards}
+  .toast.low{top:auto;bottom:calc(24px + env(safe-area-inset-bottom, 0px));background:rgba(30,110,60,.95)}
   @keyframes toastIn{from{opacity:0;transform:translate(-50%,20px) scale(.9)}}
   @keyframes fadeOut{to{opacity:0}}
 
@@ -296,33 +271,6 @@
     font-size:10px;font-weight:800;padding:2px 6px;border-radius:8px}
   .collHint{opacity:.6;font-size:14px;text-align:center;max-width:300px;margin-top:16px}
 
-  /* ---------- Онлайн-бой ---------- */
-  .big.onlineBtn{background:#4fd67a}
-  #online{justify-content:center;gap:12px;padding:70px 20px 30px}
-  #online h2{margin:0;font-size:30px}
-  .lobbySub{margin:0 0 8px;opacity:.65}
-  input.field{font:inherit;font-size:18px;font-weight:700;color:#fff;background:rgba(0,0,0,.25);border:2px solid rgba(255,255,255,.15);
-    border-radius:14px;padding:12px 16px;text-align:center;outline:none;width:min(260px, 80vw);
-    user-select:text;-webkit-user-select:text;touch-action:manipulation}
-  input.field:focus{border-color:#ffd84d}
-  input.field::placeholder{color:rgba(255,255,255,.4);font-weight:500}
-  #lobbyMain,#lobbyWait{display:flex;flex-direction:column;align-items:center;gap:12px}
-  .or{opacity:.5;font-size:14px}
-  .joinRow{display:flex;gap:8px}
-  .joinRow input.field{width:120px;letter-spacing:6px;font-size:22px}
-  .joinRow button{margin:0}
-  .codeLabel{opacity:.65;font-size:14px;text-transform:uppercase;letter-spacing:1.5px}
-  .bigCode{font-size:64px;font-weight:900;letter-spacing:10px;color:#ffd84d;text-shadow:0 5px 0 rgba(0,0,0,.3);
-    user-select:text;-webkit-user-select:text}
-  .waitTxt{font-size:17px;opacity:.85}
-  .waitTxt .dots::after{content:'';animation:dots 1.4s steps(4) infinite}
-  @keyframes dots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
-  .lobbyStatus{min-height:22px;font-size:15px;color:#ffb3d9;text-align:center;max-width:300px}
-  .countdown{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);font-size:110px;font-weight:900;
-    color:#ffd84d;text-shadow:0 8px 0 rgba(0,0,0,.3);z-index:35;pointer-events:none;animation:cdPop .9s ease-out forwards}
-  @keyframes cdPop{0%{transform:translate(-50%,-50%) scale(2.2);opacity:0}25%{transform:translate(-50%,-50%) scale(1);opacity:1}
-    80%{opacity:1}100%{transform:translate(-50%,-50%) scale(.85);opacity:0}}
-
   /* ---------- Пуговки: кошелёк, забег, награды ---------- */
   .pg{display:inline-block;width:1em;height:1em;border-radius:50%;vertical-align:-.14em;flex:none;
     background:
@@ -335,13 +283,12 @@
   .wallet{display:flex;align-items:center;gap:7px;background:rgba(0,0,0,.28);border-radius:999px;
     padding:7px 14px 7px 9px;font-weight:800;font-size:18px;font-variant-numeric:tabular-nums}
   .wallet.bump{animation:pulse .4s}
-  #menuWallet,#lvlWallet{position:fixed;top:calc(12px + var(--top));right:12px;z-index:5}
+  #menuWallet,#lvlWallet,#collWallet{position:fixed;top:calc(12px + var(--top));right:12px;z-index:5}
   .big.sprintBtn{background:linear-gradient(135deg,#ffd84d,#ffa93b);width:min(280px, 84vw);padding:18px 0;font-size:24px;
     box-shadow:0 6px 0 rgba(0,0,0,.25), 0 0 30px rgba(255,200,80,.35);animation:breathe2 2.4s ease-in-out infinite}
   @keyframes breathe2{50%{transform:scale(1.04)}}
   .big .price{display:inline-flex;align-items:center;gap:5px;margin-top:5px;background:rgba(29,39,87,.15);
     border-radius:999px;padding:3px 12px;font-size:14px;font-weight:800;opacity:1}
-  .moreModes{font-size:13px;opacity:.55;text-transform:uppercase;letter-spacing:1.5px;margin-top:6px}
   .stat b .pg{width:.8em;height:.8em}
   #overSprint .res{display:flex;flex-direction:column;align-items:center;gap:6px;background:rgba(255,255,255,.07);
     border-radius:20px;padding:16px 26px;min-width:min(300px, 86vw)}
@@ -356,6 +303,42 @@
   .nextTier{font-size:14px;opacity:.75}
   .walletLine{font-size:15px;opacity:.8;display:flex;align-items:center;gap:6px}
   #sprintAgain[disabled]{opacity:.45}
+
+  /* ---------- Задание дня и серия ---------- */
+  .daily{display:flex;flex-direction:column;gap:6px;width:min(280px, 84vw);background:rgba(0,0,0,.22);
+    border-radius:16px;padding:10px 14px;font-size:14px;line-height:1.3}
+  .dRow{display:flex;align-items:center;gap:10px}
+  .dRow .ic{font-size:20px;flex:none;width:24px;text-align:center}
+  .dRow .tx{flex:1}
+  .dRow .tx small{display:block;opacity:.6;font-size:12px}
+  .dRow .rw{display:flex;align-items:center;gap:4px;font-weight:800;flex:none}
+  .dRow.ok .tx{opacity:.6;text-decoration:line-through}
+  .dots3{display:inline-flex;gap:3px;margin-left:4px;vertical-align:middle}
+  .dots3 i{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.2)}
+  .dots3 i.on{background:#ffa93b}
+
+  /* ---------- Стили за пуговки ---------- */
+  .skinCard{cursor:pointer}
+  .skinCard.locked .lock{top:12px}
+  .skinCard .buyTag{position:absolute;top:44px;display:flex;align-items:center;gap:3px;background:#ffd84d;color:#1d2757;
+    font-weight:800;font-size:12px;border-radius:999px;padding:2px 8px;box-shadow:0 2px 0 rgba(0,0,0,.25)}
+  .skinCard.poor .buyTag{background:rgba(255,255,255,.25);color:#fff}
+  .skinCard.confirm{box-shadow:inset 0 0 0 2px #ffd84d;animation:pulse .5s}
+  .skinCard.confirm .buyTag::before{content:'Купить? '}
+
+  /* ---------- Правила ---------- */
+  #rules{overflow-y:auto;height:100vh;height:100dvh;touch-action:pan-y;padding:0 16px 30px}
+  #rules h2{margin:64px 0 12px}
+  .rulesBody{width:min(420px, 92vw);display:flex;flex-direction:column;gap:10px}
+  .rcard{background:rgba(0,0,0,.22);border-radius:16px;padding:12px 16px;font-size:14px;line-height:1.45}
+  .rcard h3{margin:0 0 6px;font-size:17px}
+  .rcard ul{margin:0;padding-left:18px}
+  .rcard table{width:100%;border-collapse:collapse;margin-top:6px;font-variant-numeric:tabular-nums}
+  .rcard td{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+  .rcard td:last-child{text-align:right;font-weight:800}
+  .rcard.honest{background:rgba(79,214,122,.18)}
+  .resetBtn{font-size:14px;padding:9px 18px;margin-top:18px}
+  .resetBtn.confirm{background:#ff5d5d;color:#fff}
 
   /* ---------- Телефон ---------- */
   @media (max-width:700px){
@@ -375,25 +358,6 @@
     #collGrid{grid-template-columns:repeat(4, 1fr);gap:8px}
     .skinPrev{--cell:22px}
 
-    /* Дуэль: бот — компактной полосой над полем */
-    body.duel{
-      --cell:min(48px, calc((100vw - 40px) / 8 - 3px), calc((100vh - 315px) / 11.4));
-      --cell:min(48px, calc((100vw - 40px) / 8 - 3px), calc((100dvh - 315px) / 11.4));
-    }
-    body.duel header{margin-bottom:6px;min-height:50px}
-    #arena{flex-direction:column;align-items:center;gap:8px}
-    body.duel #botPanel{display:grid;order:-1;--cell:9px;--gap:1px;--mini:5px;
-      grid-template-columns:auto auto;grid-template-areas:'b h' 'b s' 'b t' 'b st';
-      column-gap:14px;row-gap:0;align-items:center;justify-items:start;padding:6px 14px}
-    #botPanel .botWrap{grid-area:b}
-    #botPanel .botHead{grid-area:h;font-size:11px}
-    #botPanel .botScore{grid-area:s;font-size:22px;line-height:1.1}
-    #botPanel #botTray{grid-area:t;height:26px}
-    #botPanel .botStatus{grid-area:st}
-    #botTray .bslot{width:30px}
-    #botBoard{padding:3px;border-radius:6px}
-    #botBoard .cell{border-radius:2px}
-    .botFloat{font-size:14px}
   }
   /* Очень низкие экраны (телефон боком и т.п.) */
   @media (max-height:560px){
@@ -416,54 +380,41 @@
   <div class="wallet" id="menuWallet" title="Ваши пуговки"><span class="pg"></span><span id="walletNum">0</span></div>
   <div class="logo small" id="menuLogo"></div>
   <button class="big sprintBtn" id="btnSprint">Забег ⏱ 2 минуты<small id="sprintPrice"></small></button>
-  <div class="moreModes">Тренировка — без наград</div>
-  <button class="big" id="btnClassic">Классика<small>играй на рекорд</small></button>
-  <button class="big alt" id="btnArcade">Аркада<small>уровни с фруктами</small></button>
-  <button class="big duelBtn" id="btnDuel">Против бота 🤖<small>кто больше за 3 минуты</small></button>
-  <button class="big onlineBtn" id="btnOnline">Онлайн-бой 🌐<small>с другом по коду комнаты</small></button>
+  <button class="big alt" id="btnArcade">Аркада<small>30 уровней · открываются за пуговки</small></button>
+  <div class="daily" id="daily">
+    <div class="dRow" id="dailyTask"></div>
+    <div class="dRow" id="dailyStreak"></div>
+  </div>
   <div class="menuRow">
-    <button class="pill" id="btnCollection">🎨 Коллекция <b id="collCount"></b></button>
+    <button class="pill" id="btnCollection">🎨 Стили <b id="collCount"></b></button>
+    <button class="pill" id="btnRules">📜 Правила</button>
     <button class="pill" id="btnHelp">❓ Как играть</button>
   </div>
   <div class="menuRow">
     <button class="tog" id="togSound" title="Звуки">🔊</button>
     <button class="tog" id="togMusic" title="Музыка">🎵</button>
     <button class="tog" id="togVibro" title="Вибрация">📳</button>
-    <button class="tog" id="btnInstall" title="Установить на телефон" style="display:none">📲</button>
   </div>
-</div>
-
-<!-- Онлайн-бой: лобби -->
-<div class="screen" id="online">
-  <button class="corner l" id="onlineBack">← Меню</button>
-  <h2>Онлайн-бой 🌐</h2>
-  <p class="lobbySub">3 минуты — у кого больше очков</p>
-  <input class="field" id="nameInput" maxlength="16" placeholder="Твоё имя" autocomplete="off">
-  <div id="lobbyMain">
-    <button class="big" id="btnCreate">Создать бой<small>получишь код для друга</small></button>
-    <div class="or">или</div>
-    <div class="joinRow">
-      <input class="field" id="codeInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Код" autocomplete="off">
-      <button id="btnJoin">Войти</button>
-    </div>
-  </div>
-  <div id="lobbyWait" style="display:none">
-    <div class="codeLabel">Код комнаты</div>
-    <div class="bigCode" id="bigCode">----</div>
-    <div class="waitTxt">Ждём соперника<span class="dots"></span></div>
-    <button class="pill" id="btnShare">📤 Отправить другу</button>
-    <button class="ghost" id="btnCancel">Отмена</button>
-  </div>
-  <div class="lobbyStatus" id="lobbyStatus"></div>
 </div>
 
 <!-- Коллекция стилей -->
 <div class="screen" id="collection">
   <button class="corner l" data-go="menu">← Меню</button>
+  <div class="wallet" id="collWallet" title="Ваши пуговки"><span class="pg"></span><span id="collWalletNum">0</span></div>
   <h2>Коллекция стилей</h2>
   <div class="collProg"><div class="bar"><i id="collBar"></i></div><span id="collText"></span></div>
   <div id="collGrid"></div>
-  <p class="collHint">Новый стиль открывается, когда сносишь 3+ линии за один ход</p>
+  <p class="collHint">Стиль открывается бесплатно, когда сносишь 3+ линии за ход,<br>или покупается за <span id="skinPrice"></span>.
+    Нажми на открытый стиль, чтобы играть им. На очки стиль не влияет.</p>
+</div>
+
+<!-- Правила и награды -->
+<div class="screen" id="rules">
+  <button class="corner l" data-go="menu">← Меню</button>
+  <h2>Правила и награды</h2>
+  <div class="rulesBody" id="rulesBody"></div>
+  <button class="ghost resetBtn" id="btnReset">↺ Сбросить демо</button>
+  <p class="collHint" id="resetHint">Вернёт стартовый баланс и обнулит уровни, стили, серию и задание дня</p>
 </div>
 
 <!-- Выбор уровня -->
@@ -485,13 +436,6 @@
   <header id="hud"></header>
   <div id="arena">
     <div class="wrap"><div id="board"></div></div>
-    <div id="botPanel">
-      <div class="botHead" id="botHead">🤖 Бот</div>
-      <div class="botScore" id="botScore">0</div>
-      <div class="botWrap"><div id="botBoard"></div></div>
-      <div id="botTray"></div>
-      <div class="botStatus" id="botStatus">думает…</div>
-    </div>
   </div>
   <div id="tray"><div class="slot"></div><div class="slot"></div><div class="slot"></div></div>
 </div>
@@ -517,14 +461,6 @@
   <div class="row">
     <button class="ghost" id="loseMenu">Выйти</button>
     <button id="loseRetry">Ещё раз</button>
-  </div>
-</div>
-<div class="overlay" id="overDuel">
-  <h2 id="duelTitle"></h2>
-  <p id="duelText"></p>
-  <div class="row">
-    <button class="ghost" id="duelMenu">Меню</button>
-    <button id="duelAgain">Реванш</button>
   </div>
 </div>
 <div class="overlay" id="overSprint">
@@ -554,7 +490,8 @@
 const N = 8;
 const COLORS = ['#ff5d5d','#ffa93b','#ffd84d','#4fd67a','#36c3ff','#5d7bff','#b45dff','#ff6fc8'];
 const STONE = '#5a6396';
-const FRUITS = ['🍓','🍋','🍇','🍊','🍏','🍒'];
+// Находки в блоках Аркады — всё из швейной шкатулки (раньше были фрукты)
+const FRUITS = ['🧵','🧶','🧷','🎀','🧦','🧤'];
 const LEVEL_COUNT = 30;
 
 // Фигуры: '#' — блок, '.' — пусто
@@ -676,7 +613,6 @@ const SFX = {
   win()     { [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5].forEach((f, k) => Sound.tone(f, k === 5 ? .8 : .18, { type: 'triangle', vol: .2, delay: k * .13 })); },
   lose()    { [392, 349.23, 311.13, 261.63].forEach((f, k) => Sound.tone(f, .38, { type: 'triangle', vol: .16, delay: k * .22 })); },
   stuck()   { Sound.tone(320, .45, { vol: .2, to: 120 }); },
-  botClear(){ Sound.tone(700, .08, { vol: .04 }); },
   boom()    { Sound.tone(120, .5, { vol: .5, to: 45 }); Sound.noise(.5, { freq: 700, vol: .25 }); },
 };
 
@@ -738,6 +674,17 @@ const Coll = {
 // --c — цвет фигуры, --i — номер клетки (для волновых задержек анимаций).
 const W = 'animation-delay:calc(var(--i, 0) * -110ms);'; // «волна» по полю
 const SKINS = [
+  { id: 'button', name: 'Пуговки 🔘',   // каждый блок — пуговица с четырьмя дырочками
+    host: 'background:transparent;box-shadow:none;',
+    before: `background:
+      radial-gradient(circle at 39% 39%, rgba(0,0,0,.5) 0 6%, transparent 7.5%),
+      radial-gradient(circle at 61% 39%, rgba(0,0,0,.5) 0 6%, transparent 7.5%),
+      radial-gradient(circle at 39% 61%, rgba(0,0,0,.5) 0 6%, transparent 7.5%),
+      radial-gradient(circle at 61% 61%, rgba(0,0,0,.5) 0 6%, transparent 7.5%),
+      radial-gradient(circle at 38% 32%, rgba(255,255,255,.45) 0 14%, transparent 34%),
+      radial-gradient(circle, transparent 0 25%, rgba(0,0,0,.16) 26% 29%, transparent 30%),
+      radial-gradient(circle, var(--c) 0 58%, color-mix(in srgb, var(--c) 68%, #000) 60% 68%, transparent 70%);
+      border-radius:50%;filter:drop-shadow(0 2px 2px rgba(0,0,0,.35));` },
   { id: 'classic', name: 'Классика' },
   { id: 'disco', name: 'Диско-шар 🪩',
     before: `background:
@@ -912,7 +859,7 @@ const SKINS = [
 
 let skinIdx = Math.max(0, SKINS.findIndex(s => s.id === localStorage.getItem('bp-skin')));
 // Стиль вешается на конкретные контейнеры, а не на всю страницу,
-// чтобы у игрока и у бота стили были независимыми
+// (поле, лоток, «призрак» и превью в коллекции)
 function setSkinClass(el, i) {
   SKINS.forEach(s => el.classList.remove('skin-' + s.id));
   el.classList.add('skin-' + SKINS[i].id);
@@ -930,7 +877,7 @@ function randomSkin() {
 }
 
 // ---------- Уровни ----------
-// Генерируются по номеру: больше фруктов, больше видов, больше камней на старте
+// Генерируются по номеру: больше находок, больше видов, больше камней на старте
 function levelDef(n) {
   const kinds = n <= 3 ? 1 : n <= 10 ? 2 : 3;
   const start = (n * 2) % FRUITS.length;
@@ -975,15 +922,40 @@ const ECON = {
   // Аркада пуговок не даёт — их зарабатывают только в Забеге.
   ARCADE_FREE: 3,      // первые уровни бесплатные
   levelPrice(n) { return n <= this.ARCADE_FREE ? 0 : n <= 12 ? 5 : n <= 24 ? 10 : 15; },
+  SKIN_PRICE: 15,      // стиль блоков в коллекции; чисто внешний, на очки не влияет
+  STREAK_DAYS: 3,      // играешь столько дней подряд — +1 бесплатный забег в день
+  TASK_REWARD: 5,      // за задание дня (входит в дневной лимит)
 };
 const SPRINT_TIME = 120; // секунд
 
-const Wallet = {
-  // Местная дата: «новый день» наступает в полночь по часам игрока, а не по UTC
-  today() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// Местная дата: «новый день» наступает в полночь по часам игрока, а не по UTC
+function dateKey(shiftDays = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + shiftDays);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Серия дней: сколько дней подряд игрок заходил в Забег
+const Streak = {
+  read() { try { return JSON.parse(localStorage.getItem('bp-streak')) || { last: '', n: 0 }; } catch (e) { return { last: '', n: 0 }; } },
+  // Какой будет серия, если сыграть сегодня
+  todayCount() {
+    const st = this.read();
+    return st.last === dateKey() ? st.n : st.last === dateKey(-1) ? st.n + 1 : 1;
   },
+  // Текущая серия «до игры сегодня» — для подписи в меню
+  current() {
+    const st = this.read();
+    return st.last === dateKey() || st.last === dateKey(-1) ? st.n : 0;
+  },
+  playedToday() { return this.read().last === dateKey(); },
+  touch() { localStorage.setItem('bp-streak', JSON.stringify({ last: dateKey(), n: this.todayCount() })); },
+  bonusToday() { return this.todayCount() >= ECON.STREAK_DAYS; },
+};
+
+const Wallet = {
+  today() { return dateKey(); },
+  freePerDay() { return ECON.FREE_PER_DAY + (Streak.bonusToday() ? 1 : 0); },
   get balance() {
     const v = localStorage.getItem('bp-wallet');
     return v === null ? ECON.START_WALLET : +v;
@@ -996,15 +968,16 @@ const Wallet = {
     return d;
   },
   saveDay(d) { localStorage.setItem('bp-day', JSON.stringify(d)); },
-  freeLeft() { return Math.max(0, ECON.FREE_PER_DAY - this.day().free); },
+  freeLeft() { return Math.max(0, this.freePerDay() - this.day().free); },
   canPlay() { return this.freeLeft() > 0 || this.balance >= ECON.ENTRY; },
   // Списывает вход. Возвращает 'free' | 'paid' | null (не хватает пуговок)
   pay() {
     const d = this.day();
-    if (d.free < ECON.FREE_PER_DAY) { d.free++; this.saveDay(d); return 'free'; }
-    if (this.balance < ECON.ENTRY) return null;
-    this.balance -= ECON.ENTRY;
-    return 'paid';
+    let how = null;
+    if (d.free < this.freePerDay()) { d.free++; this.saveDay(d); how = 'free'; }
+    else if (this.balance >= ECON.ENTRY) { this.balance -= ECON.ENTRY; how = 'paid'; }
+    if (how) Streak.touch();
+    return how;
   },
   rewardFor(score) {
     let pay = 0;
@@ -1021,6 +994,38 @@ const Wallet = {
   },
 };
 const PG = '<span class="pg"></span>';
+
+// ---------- Задание дня ----------
+// Одно задание на день, одинаковое для всех: выбирается по дате.
+// Награда — ECON.TASK_REWARD, один раз в день, внутри дневного лимита.
+const TASKS = [
+  { id: 'mega',    text: 'Снеси 3 линии одним ходом',        on: 'move',      ok: e => e.n >= 3 },
+  { id: 'combo',   text: 'Сделай комбо ×4',                  on: 'move',      ok: e => e.combo >= 4 },
+  { id: 'score',   text: 'Набери 1000 очков в Забеге',        on: 'sprintEnd', ok: e => e.score >= 1000 },
+  { id: 'perfect', text: 'Очисти поле целиком',               on: 'move',      ok: e => e.perfect },
+  { id: 'level',   text: 'Пройди любой уровень Аркады',       on: 'win',       ok: () => true },
+  { id: 'lines',   text: 'Убери 12 линий за один Забег',      on: 'sprintEnd', ok: e => e.lines >= 12 },
+];
+const Task = {
+  today() {
+    const k = dateKey();
+    let h = 0;
+    for (const ch of k) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return TASKS[h % TASKS.length];
+  },
+  done() { return !!Wallet.day().task; },
+  event(type, e = {}) {
+    const t = this.today();
+    if (t.on !== type || this.done() || !t.ok(e)) return;
+    const d = Wallet.day(); d.task = true; Wallet.saveDay(d);
+    const got = Wallet.credit(ECON.TASK_REWARD);
+    setTimeout(() => {
+      SFX.record(); buzz([30, 40, 60]);
+      toast(got > 0 ? `✅ Задание дня выполнено!<br>«${t.text}» · +${got} ${PG}`
+                    : `✅ Задание дня выполнено!<br>Дневной лимит наград уже набран`, true);
+    }, 900);
+  },
+};
 function priceHTML() {
   const free = Wallet.freeLeft();
   if (free > 0) return `<span class="price">🎁 бесплатно сегодня</span>`;
@@ -1028,7 +1033,7 @@ function priceHTML() {
 }
 
 // ---------- Состояние ----------
-let mode = 'classic', level = 1;
+let mode = 'sprint', level = 1;
 let board, pieces, score, combo, goals = [], finished = false;
 
 const $ = id => document.getElementById(id);
@@ -1223,7 +1228,7 @@ function findJackpot(b) {
   return found.length ? prefer(found) : null;
 }
 
-// b0 — поле, под которое подбираем; g — счётчик «джекпота» (у бота свой)
+// b0 — поле, под которое подбираем; g — счётчик «джекпота»
 function smartSet(b0 = board, g = null) {
   let b = b0;
   const chosen = [], used = new Set();
@@ -1328,20 +1333,11 @@ function renderTray(animate) {
 }
 
 function renderHud() {
-  if (mode === 'classic') {
-    $hud.innerHTML = `
-      <div class="stat"><span>Счёт</span><b id="score">${score}</b></div>
-      <div class="stat"><span>Рекорд</span><b id="best">${save.best}</b></div>`;
-  } else if (mode === 'sprint') {
+  if (mode === 'sprint') {
     $hud.innerHTML = `
       <div class="stat"><span>Счёт</span><b id="score">${score}</b></div>
       <div class="stat"><span>Время</span><b id="timer">2:00</b></div>
       <div class="stat"><span>Награда</span><b id="reward">0 ${PG}</b></div>`;
-  } else if (mode === 'duel' || mode === 'online') {
-    $hud.innerHTML = `
-      <div class="stat"><span>Ты</span><b id="score">${score}</b></div>
-      <div class="stat"><span>Время</span><b id="timer">3:00</b></div>
-      <div class="stat"><span>${mode === 'online' ? 'Соперник' : 'Бот 🤖'}</span><b id="botScoreHud">0</b></div>`;
   } else {
     $hud.innerHTML = `
       <div class="stat"><span>Уровень</span><b>${level}</b></div>
@@ -1352,13 +1348,9 @@ function renderHud() {
 }
 
 // Счёт плавно «докручивается» до нового значения
-let shownScore = 0, tweenId = 0, bestAtStart = 0, recordShown = false;
+let shownScore = 0, tweenId = 0;
 function updateScore() {
   if (mode === 'arcade') return;
-  if (mode === 'classic') {
-    if (score > save.best) save.best = score;
-    $('best').textContent = save.best;
-  }
   const el = $('score'), from = shownScore, to = score, t0 = performance.now();
   cancelAnimationFrame(tweenId);
   const step = now => {
@@ -1379,10 +1371,6 @@ function updateScore() {
         setTimeout(() => { SFX.record(); floatText(`Награда ${r}`, 'новый порог!', 2, true); }, 600);
       }
     }
-  }
-  if (mode === 'classic' && !recordShown && bestAtStart > 0 && score > bestAtStart) {
-    recordShown = true;
-    setTimeout(() => { SFX.record(); floatText('Новый рекорд!', '🏆', 3, true); }, 700);
   }
 }
 
@@ -1529,7 +1517,7 @@ window.addEventListener('pointercancel', endDrag);
 
 // ---------- Ход ----------
 function place(i, p, r, c) {
-  if (mode === 'sprint' && duel && !duel.timerId) runSprintClock();
+  if (mode === 'sprint' && run && !run.timerId) runSprintClock();
   if (!localStorage.getItem('bp-h-drag')) { localStorage.setItem('bp-h-drag', '1'); hideDragHint(); }
   const placed = p.cells.map(([dr, dc, f]) => {
     const idx = (r + dr) * N + c + dc;
@@ -1580,6 +1568,8 @@ function place(i, p, r, c) {
     buzz(10);
   }
   score += gained;
+  if (run) run.lines = (run.lines || 0) + n;
+  Task.event('move', { n, combo, perfect });
 
   // Приземление фигуры
   renderBoard();
@@ -1610,14 +1600,13 @@ function place(i, p, r, c) {
   if (refilled) { refill(); SFX.refill(); }
   renderTray(refilled);
   updateScore();
-  // Онлайн: отправляем сопернику своё поле после каждого хода
-  sendState({ placed, cleared: [...cleared].map(i => [i, old[i].c]), gained: n > 0 ? gained : 0, n });
 
   if (mode === 'arcade' && goals.every(g => g.left === 0)) {
     finished = true;
     if (save.unlocked <= level) save.unlocked = Math.min(level + 1, LEVEL_COUNT);
+    Task.event('win');
     setTimeout(() => {
-      $('winText').textContent = `Уровень ${level} — все фрукты собраны`;
+      $('winText').textContent = `Уровень ${level} — всё собрано в шкатулку`;
       $('winNext').style.display = level < LEVEL_COUNT ? '' : 'none';
       $('overWin').style.display = 'flex';
       SFX.win(); buzz([40, 60, 40, 60, 120]);
@@ -1626,14 +1615,12 @@ function place(i, p, r, c) {
   }
 
   if (!pieces.some(x => x && fitsAnywhere(board, x))) {
-    // В дуэли не проигрываем — поле очищается, время идёт дальше
-    if (mode === 'duel' || mode === 'online' || mode === 'sprint') { setTimeout(() => stuckReset(false), maxDelay + 500); return; }
+    // В Забеге не проигрываем — поле очищается, время идёт дальше
+    if (mode === 'sprint') { setTimeout(stuckReset, maxDelay + 500); return; }
     finished = true;
     setTimeout(deathAnim, maxDelay + 400);
     setTimeout(() => {
-      $('loseText').innerHTML = mode === 'classic'
-        ? `Счёт: <b>${score}</b>`
-        : `Осталось собрать: ${goals.filter(g => g.left).map(g => g.f + ' ' + g.left).join('  ')}`;
+      $('loseText').innerHTML = `Осталось собрать: ${goals.filter(g => g.left).map(g => g.f + ' ' + g.left).join('  ')}`;
       $('overLose').style.display = 'flex';
       SFX.lose(); buzz(200);
     }, maxDelay + 1400);
@@ -1736,202 +1723,57 @@ function buyLevel(n, btn) {
   toast(`Уровень ${n} открыт!`);
 }
 
-// ---------- Режим «Против бота» ----------
-const DUEL_TIME = 180;      // секунд
-const BOT_THINK = [1700, 3200]; // пауза бота между ходами, мс
-const BOT_MISTAKE = 0.15;   // шанс, что бот сходит не лучшим образом
-let duel = null, bot = null;
-
-const botEls = [];
-for (let i = 0; i < N * N; i++) {
-  const d = document.createElement('div');
-  d.className = 'cell';
-  d.style.setProperty('--i', (i % N) + Math.floor(i / N));
-  $('botBoard').appendChild(d);
-  botEls.push(d);
-}
-
-function refillBot() {
-  bot.pieces = smartSet(bot.board, bot.gen) || [newPiece(), newPiece(), newPiece()];
-}
-function renderBot(hi = -1) {
-  botEls.forEach((el, i) => paintCell(el, bot.board[i]));
-  const t = $('botTray');
-  t.innerHTML = '';
-  bot.pieces.forEach((p, i) => {
-    const slot = document.createElement('div');
-    slot.className = 'bslot';
-    if (p) slot.appendChild(pieceEl(p, 'piece' + (i === hi ? ' thinking' : '')));
-    t.appendChild(slot);
-  });
-  $('botScore').textContent = bot.score;
-  const h = $('botScoreHud');
-  if (h) h.textContent = bot.score;
-}
-function botFloat(text) {
-  const d = document.createElement('div');
-  d.className = 'botFloat';
-  d.textContent = text;
-  document.querySelector('.botWrap').appendChild(d);
-  setTimeout(() => d.remove(), 1000);
-}
-
-function scheduleBot() {
-  if (!duel) return;
-  $('botStatus').textContent = 'думает…';
-  duel.botTimer = setTimeout(botTurn, BOT_THINK[0] + Math.random() * (BOT_THINK[1] - BOT_THINK[0]));
-}
-
-function botTurn() {
-  if (!duel || finished) return;
-  const opts = [];
-  bot.pieces.forEach((p, i) => {
-    if (!p) return;
-    const all = [];
-    bestMove(bot.board, p, all);
-    all.forEach(m => opts.push({ ...m, i, p, v: m.lines * 1000 + m.score }));
-  });
-  if (!opts.length) { stuckReset(true); duel.botTimer = setTimeout(scheduleBot, 900); return; }
-  opts.sort((a, b) => b.v - a.v);
-  const move = Math.random() < BOT_MISTAKE ? opts[rand(opts.length)] : opts[0];
-  // Показываем, какую фигуру бот берёт, и через мгновение ставим
-  renderBot(move.i);
-  $('botStatus').textContent = 'ставит…';
-  duel.botTimer = setTimeout(() => {
-    if (!duel || finished) return;
-    applyBotMove(move);
-    scheduleBot();
-  }, 450);
-}
-
-function applyBotMove({ p, i, r, c }) {
-  const placed = p.cells.map(([dr, dc]) => {
-    const idx = (r + dr) * N + c + dc;
-    bot.board[idx] = { c: p.color, f: null };
-    return idx;
-  });
-  const lines = fullLines(bot.board), cleared = lineCells(lines);
-  const n = lines.rows.length + lines.cols.length;
-  const old = {};
-  cleared.forEach(idx => { old[idx] = bot.board[idx]; bot.board[idx] = null; });
-  let gained = p.cells.length;
-  if (n > 0) {
-    bot.combo++;
-    gained += n * n * 10 * bot.combo * (n >= 3 ? 5 : 1);
-    if (bot.board.every(x => !x)) gained += 300;
-    if (n >= 3) {
-      bot.gen.since = 0;
-      // У бота свой стиль — меняется только от его собственных 3+ линий
-      bot.skin = (bot.skin + 1) % SKINS.length;
-      setTimeout(() => { if (bot) { setSkinClass($('botPanel'), bot.skin); botFloat('новый стиль'); } }, 500);
-    }
-  } else bot.combo = 0;
-  bot.score += gained;
-
-  bot.pieces[i] = null;
-  if (bot.pieces.every(x => !x)) refillBot();
-  renderBot();
-  placed.forEach(idx => { if (!cleared.has(idx)) botEls[idx].classList.add('land'); });
-  cleared.forEach(idx => { paintCell(botEls[idx], old[idx]); botEls[idx].classList.add('clearing'); });
-  if (cleared.size) setTimeout(() => { if (bot) botEls.forEach((el, k) => paintCell(el, bot.board[k])); }, 360);
-  if (n > 0) { botFloat(`+${gained}` + (n >= 3 ? ' ×5' : '')); SFX.botClear(); }
-
-  if (!bot.pieces.some(x => x && fitsAnywhere(bot.board, x))) {
-    clearTimeout(duel.botTimer);
-    setTimeout(() => stuckReset(true), 600);
-    duel.botTimer = setTimeout(scheduleBot, 1500);
-  }
-}
-
-// Нет ходов в дуэли — поле очищается, игра продолжается
-function stuckReset(isBot) {
-  if (!duel || finished) return;
-  const els = isBot ? botEls : cellEls, b = isBot ? bot.board : board;
-  els.forEach((el, i) => {
-    if (!b[i]) return;
+// Нет ходов в Забеге — поле очищается, время идёт дальше
+function stuckReset() {
+  if (!run || finished) return;
+  cellEls.forEach((el, i) => {
+    if (!board[i]) return;
     el.style.animationDelay = Math.floor(i / N) * 40 + 'ms';
     el.classList.add('clearing');
   });
-  if (isBot) botFloat('новое поле');
-  else { floatText('Нет ходов', 'новое поле', 2, true); SFX.stuck(); buzz(120); }
+  floatText('Нет ходов', 'новое поле', 2, true); SFX.stuck(); buzz(120);
   setTimeout(() => {
-    if (!duel) return;
-    if (isBot) {
-      bot.board = Array(N * N).fill(null); bot.combo = 0;
-      refillBot(); renderBot();
-    } else {
-      board.fill(null); combo = 0;
-      refill(); renderBoard(); renderTray(true);
-      sendState({ reset: true });
-    }
+    if (!run) return;
+    board.fill(null); combo = 0;
+    refill(); renderBoard(); renderTray(true);
   }, 700);
 }
 
 function updateTimer() {
-  const t = Math.max(0, duel.timeLeft), el = $('timer');
+  const t = Math.max(0, run.timeLeft), el = $('timer');
   el.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   el.classList.toggle('hurry', t <= 10);
   if (t <= 10 && t > 0) SFX.tick();
 }
 
-function startDuel() {
-  bot = { board: Array(N * N).fill(null), pieces: [], score: 0, combo: 0, gen: { since: 0 }, skin: 0 };
-  setSkinClass($('botPanel'), bot.skin);
-  refillBot(); renderBot();
-  duel = { timeLeft: DUEL_TIME };
-  updateTimer();
-  duel.timerId = setInterval(() => {
-    duel.timeLeft--;
-    updateTimer();
-    if (duel.timeLeft <= 0) endDuel();
-  }, 1000);
-  scheduleBot();
-}
-
-function stopDuel() {
-  if (!duel) return;
-  clearInterval(duel.timerId);
-  clearTimeout(duel.botTimer);
-  clearTimeout(duel.fallback);
-  duel = null;
-}
-
-function endDuel() {
-  stopDuel();
-  $('duelAgain').disabled = false;
-  $('duelAgain').style.display = '';
-  finished = true;
-  $('botStatus').textContent = 'время вышло';
-  const you = score, them = bot.score;
-  $('duelTitle').textContent = you > them ? 'Ты победил! 🏆' : you < them ? 'Бот победил 🤖' : 'Ничья 🤝';
-  $('duelText').innerHTML = `Ты <b>${you}</b> : <b>${them}</b> Бот`;
-  setTimeout(() => {
-    $('overDuel').style.display = 'flex';
-    if (you > them) { SFX.win(); buzz([40, 60, 40, 60, 120]); }
-    else if (you < them) { SFX.lose(); buzz(200); }
-    else SFX.record();
-  }, 500);
+let run = null; // текущий Забег: { timeLeft, timerId }
+function stopRun() {
+  if (!run) return;
+  clearInterval(run.timerId);
+  run = null;
 }
 
 // ---------- Режим «Забег»: 2 минуты на очки, награда в пуговках ----------
 // Часы идут с первого поставленного блока — новичок успевает осмотреться
 function startSprint() {
-  duel = { timeLeft: SPRINT_TIME, sprint: true };
+  run = { timeLeft: SPRINT_TIME, sprint: true };
   updateTimer();
 }
 function runSprintClock() {
-  duel.timerId = setInterval(() => {
-    duel.timeLeft--;
+  run.timerId = setInterval(() => {
+    run.timeLeft--;
     updateTimer();
-    if (duel.timeLeft <= 0) endSprint();
+    if (run.timeLeft <= 0) endSprint();
   }, 1000);
 }
 
 function endSprint() {
-  stopDuel();
+  const lines = run ? run.lines || 0 : 0;
+  stopRun();
   finished = true;
   if (drag) endDrag();
   const earned = Wallet.credit(Wallet.rewardFor(score));
+  Task.event('sprintEnd', { score, lines });
   if (score > save.sprintBest) save.sprintBest = score;
   $('sprintScore').textContent = score;
   $('sprintTitle').textContent = earned > 0 ? 'Отличный забег! 🎉' : 'Время вышло! ⏱';
@@ -1948,6 +1790,7 @@ function endSprint() {
   const el = $('sprintEarn');
   el.textContent = '0';
   setTimeout(() => {
+    if (!$('game').classList.contains('active')) return; // игрок уже ушёл с экрана игры
     $('overSprint').style.display = 'flex';
     if (earned > 0) { SFX.win(); buzz([40, 60, 40, 60, 120]); } else SFX.record();
     let k = 0;
@@ -1967,21 +1810,19 @@ function refreshSprintAgain() {
 
 function playSprint() {
   const how = Wallet.pay();
-  if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Потренируйтесь в Классике и приходите завтра за бесплатной попыткой`); return; }
+  if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
   startGame('sprint');
   if (how === 'paid') floatText(`−${ECON.ENTRY}`, 'вход в забег', 1, true);
 }
 
 function startGame(m, n) {
-  stopDuel();
+  stopRun();
   mode = m; level = n || 1;
-  document.body.classList.toggle('duel', mode === 'duel' || mode === 'online');
   // В забеге «Заново» спрятан: каждая попытка — это вход (бесплатный или платный)
-  $('btnRestart').style.display = mode === 'online' || mode === 'sprint' ? 'none' : '';
-  $('botHead').textContent = '🤖 Бот';
+  $('btnRestart').style.display = mode === 'sprint' ? 'none' : '';
   board = Array(N * N).fill(null);
   score = 0; combo = 0; finished = false;
-  shownScore = 0; bestAtStart = save.best; recordShown = false; setsSinceBig = 0;
+  shownScore = 0; setsSinceBig = 0;
   goals = [];
   if (mode === 'arcade') {
     const def = levelDef(level);
@@ -1991,255 +1832,13 @@ function startGame(m, n) {
   refill();
   show('game');
   renderHud(); renderBoard(); renderTray(true);
-  if (mode === 'duel') startDuel();
   if (mode === 'sprint') {
     startSprint();
     hintOnce('sprint', `⏱ 2 минуты пойдут с первого хода<br>Больше очков — больше ${PG} в награду`);
   }
   if (!localStorage.getItem('bp-h-drag')) requestAnimationFrame(showDragHint);
-  if (mode === 'arcade') hintOnce('arcade', '🍓 Фрукты спрятаны в блоках.<br>Очищай линии с ними, чтобы выполнить задание сверху!');
-  if (mode === 'duel') hintOnce('duel', '⏱ У вас 3 минуты!<br>Набери больше очков, чем бот 🤖');
+  if (mode === 'arcade') hintOnce('arcade', '🧵 В блоках спрятаны вещи из швейной шкатулки.<br>Очищай линии с ними, чтобы собрать всё по заданию сверху!');
 }
-
-// ---------- Онлайн-бой ----------
-// Адрес сервера. Если игра открыта с сервера (http/https) — берётся тот же адрес сама.
-// Если игру открывают просто файлом — впиши сюда адрес VPS, например 'wss://game.example.com/ws'.
-const ONLINE_SERVER = '';
-
-function serverUrl() {
-  if (ONLINE_SERVER) return ONLINE_SERVER;
-  if (location.protocol === 'https:') return 'wss://' + location.host + '/ws';
-  if (location.protocol === 'http:') return 'ws://' + location.host + '/ws';
-  return null;
-}
-
-const Net = {
-  ws: null,
-  connect() {
-    return new Promise((resolve, reject) => {
-      const url = serverUrl();
-      if (!url) return reject(new Error('nourl'));
-      if (this.ws && this.ws.readyState === 1) return resolve();
-      if (this.ws) { try { this.ws.close(); } catch (e) {} }
-      const ws = new WebSocket(url);
-      this.ws = ws;
-      const to = setTimeout(() => { ws.close(); reject(new Error('timeout')); }, 6000);
-      ws.onopen = () => { clearTimeout(to); resolve(); };
-      ws.onerror = () => { clearTimeout(to); reject(new Error('error')); };
-      ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } onNet(m); };
-      ws.onclose = () => { if (this.ws === ws) { this.ws = null; onNet({ t: 'closed' }); } };
-    });
-  },
-  send(m) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); },
-};
-
-const isColor = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
-let lobbyCode = null, oppName = 'Соперник';
-
-function lobbyStatus(text) { $('lobbyStatus').textContent = text || ''; }
-function lobbyView(waiting) {
-  $('lobbyMain').style.display = waiting ? 'none' : 'flex';
-  $('lobbyWait').style.display = waiting ? 'flex' : 'none';
-  $('nameInput').style.display = waiting ? 'none' : '';
-}
-function openOnline(joinCode) {
-  stopDuel();
-  $('nameInput').value = localStorage.getItem('bp-name') || '';
-  $('codeInput').value = joinCode || '';
-  lobbyView(false);
-  lobbyStatus(serverUrl() ? '' : 'Онлайн работает, когда игра открыта по ссылке с сервера');
-  show('online');
-  if (joinCode) joinRoom();
-}
-function playerName() {
-  const n = $('nameInput').value.trim().slice(0, 16);
-  localStorage.setItem('bp-name', n);
-  return n || 'Игрок';
-}
-async function ensureConnected() {
-  lobbyStatus('Подключаемся…');
-  try { await Net.connect(); lobbyStatus(''); return true; }
-  catch (e) { lobbyStatus(e.message === 'nourl' ? 'Онлайн работает, когда игра открыта по ссылке с сервера' : 'Сервер недоступен. Попробуй позже или сыграй с ботом 🤖'); return false; }
-}
-async function createRoom() {
-  if (!(await ensureConnected())) return;
-  Net.send({ t: 'create', name: playerName() });
-}
-async function joinRoom() {
-  const code = $('codeInput').value.replace(/\D/g, '');
-  if (code.length !== 4) { lobbyStatus('Введи код из 4 цифр'); return; }
-  if (!(await ensureConnected())) return;
-  Net.send({ t: 'join', code, name: playerName() });
-}
-function shareRoom() {
-  const link = location.protocol.startsWith('http') ? `${location.origin}${location.pathname}#join=${lobbyCode}` : '';
-  const text = `Го в «${GAME_NAME}» онлайн! Код комнаты: ${lobbyCode}` + (link ? `\n${link}` : '');
-  if (navigator.share) navigator.share({ text }).catch(() => {});
-  else if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => lobbyStatus('Скопировано — отправь другу'), () => {});
-}
-
-// Свой ход → сопернику
-function sendState(ev = {}) {
-  if (mode !== 'online' || !duel) return;
-  Net.send({
-    t: 'state', score, skin: skinIdx,
-    board: board.map(c => (c ? c.c : null)),
-    tray: pieces.map(p => (p ? { w: p.w, h: p.h, color: p.color, cells: p.cells.map(([r, c]) => [r, c]) } : null)),
-    ...ev,
-  });
-}
-
-// Ход соперника → на мини-поле
-function applyOpp(m) {
-  if (mode !== 'online' || !bot || !Array.isArray(m.board) || m.board.length !== N * N) return;
-  bot.board = m.board.map(c => (isColor(c) ? { c, f: null } : null));
-  bot.pieces = (Array.isArray(m.tray) ? m.tray.slice(0, 3) : []).map(p =>
-    p && isColor(p.color) && Array.isArray(p.cells)
-      ? { w: Math.min(5, p.w | 0), h: Math.min(5, p.h | 0), color: p.color, cells: p.cells.slice(0, 25).map(([r, c]) => [r | 0, c | 0, null]) }
-      : null);
-  bot.score = Math.max(0, m.score | 0);
-  if (Number.isInteger(m.skin) && m.skin >= 0 && m.skin < SKINS.length && m.skin !== bot.skin) {
-    bot.skin = m.skin; setSkinClass($('botPanel'), m.skin);
-  }
-  renderBot();
-  const cl = Array.isArray(m.cleared) ? m.cleared : [];
-  const clSet = new Set(cl.map(x => x[0]));
-  (Array.isArray(m.placed) ? m.placed : []).forEach(i => { if (!clSet.has(i) && botEls[i]) botEls[i].classList.add('land'); });
-  cl.forEach(([i, c]) => {
-    if (!botEls[i] || !isColor(c)) return;
-    paintCell(botEls[i], { c, f: null });
-    botEls[i].classList.add('clearing');
-  });
-  if (cl.length) setTimeout(() => { if (bot) botEls.forEach((el, k) => paintCell(el, bot.board[k])); }, 360);
-  if (m.n > 0) { botFloat(`+${m.gained | 0}` + (m.n >= 3 ? ' ×5' : '')); SFX.botClear(); }
-  if (m.reset) botFloat('новое поле');
-  $('botStatus').textContent = 'играет';
-}
-
-function countdown(ms, done) {
-  let n = Math.round(ms / 1000);
-  const token = duel;
-  const tickNum = () => {
-    if (duel !== token) return;
-    document.querySelectorAll('.countdown').forEach(e => e.remove());
-    const el = document.createElement('div');
-    el.className = 'countdown';
-    el.textContent = n > 0 ? n : 'Старт!';
-    if (n <= 0) el.style.fontSize = '64px';
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 900);
-    if (n > 0) { SFX.tick(); buzz(15); n--; setTimeout(tickNum, 1000); }
-    else { SFX.skin(); buzz(40); done(); }
-  };
-  tickNum();
-}
-
-function startOnlineMatch(m) {
-  oppName = String(m.opponent || 'Соперник').slice(0, 16);
-  startGame('online');
-  bot = { board: Array(N * N).fill(null), pieces: [], score: 0, combo: 0, skin: 0 };
-  setSkinClass($('botPanel'), 0);
-  renderBot();
-  $('botHead').textContent = '🧑 ' + oppName;
-  $('botStatus').textContent = 'готовится…';
-  $('duelAgain').disabled = false;
-  duel = { online: true, timeLeft: Math.round(m.duration / 1000) };
-  updateTimer();
-  finished = true; // пока идёт отсчёт, ходить нельзя
-  countdown(m.countdown, () => {
-    finished = false;
-    duel.endAt = Date.now() + m.duration;
-    duel.timerId = setInterval(onlineTick, 250);
-    $('botStatus').textContent = 'играет';
-    sendState();
-  });
-}
-
-function onlineTick() {
-  if (!duel) return;
-  const t = Math.max(0, Math.ceil((duel.endAt - Date.now()) / 1000));
-  if (t !== duel.timeLeft) { duel.timeLeft = t; updateTimer(); }
-  if (t <= 0 && !finished) {
-    finished = true;
-    $('botStatus').textContent = 'подсчёт…';
-    // Итог объявляет сервер; если он не ответит — считаем по своим данным
-    duel.fallback = setTimeout(() => endOnline(score, bot ? bot.score : 0), 4500);
-  }
-}
-
-function endOnline(you, them, note) {
-  if (mode !== 'online') return;
-  stopDuel();
-  finished = true;
-  document.querySelectorAll('.countdown').forEach(e => e.remove());
-  $('botStatus').textContent = 'бой окончен';
-  $('duelTitle').textContent = note ? note : you > them ? 'Ты победил! 🏆' : you < them ? `${oppName} победил` : 'Ничья 🤝';
-  $('duelText').innerHTML = `Ты <b>${you}</b> : <b>${them}</b> ${oppName.replace(/[<>&]/g, '')}`;
-  $('duelAgain').disabled = !!note;
-  $('duelAgain').style.display = note ? 'none' : '';
-  setTimeout(() => {
-    $('overDuel').style.display = 'flex';
-    if (note || you > them) { SFX.win(); buzz([40, 60, 40, 60, 120]); }
-    else if (you < them) { SFX.lose(); buzz(200); }
-    else SFX.record();
-  }, 400);
-}
-
-// Сообщения от сервера
-function onNet(m) {
-  switch (m.t) {
-    case 'created':
-      lobbyCode = m.code;
-      $('bigCode').textContent = m.code;
-      lobbyView(true);
-      lobbyStatus('');
-      break;
-    case 'error':
-      lobbyView(false);
-      lobbyStatus(m.msg || 'Ошибка');
-      break;
-    case 'start':
-      $('overDuel').style.display = 'none';
-      $('duelAgain').style.display = '';
-      startOnlineMatch(m);
-      break;
-    case 'opp':
-      applyOpp(m);
-      break;
-    case 'oppRematch':
-      if ($('overDuel').style.display === 'flex')
-        $('duelText').insertAdjacentHTML('beforeend', `<br><small>${oppName.replace(/[<>&]/g, '')} хочет реванш!</small>`);
-      break;
-    case 'end':
-      endOnline(m.you | 0, m.them | 0);
-      break;
-    case 'oppLeft':
-      if (mode === 'online' && duel) endOnline(score, bot ? bot.score : 0, 'Соперник вышел — победа! 🏆');
-      else if (mode === 'online' && $('overDuel').style.display === 'flex') {
-        $('duelAgain').style.display = 'none';
-        $('duelText').insertAdjacentHTML('beforeend', '<br><small>Соперник ушёл</small>');
-      } else if ($('online').classList.contains('active')) { lobbyView(false); lobbyStatus('Соперник отключился'); }
-      break;
-    case 'closed':
-      if (mode === 'online' && duel) {
-        stopDuel(); finished = true;
-        $('duelTitle').textContent = 'Связь потеряна 📡';
-        $('duelText').innerHTML = `Ты <b>${score}</b> : <b>${bot ? bot.score : 0}</b> ${oppName.replace(/[<>&]/g, '')}`;
-        $('duelAgain').style.display = 'none';
-        $('overDuel').style.display = 'flex';
-      } else if ($('online').classList.contains('active')) { lobbyView(false); lobbyStatus('Связь с сервером потеряна'); }
-      break;
-  }
-}
-
-$('btnOnline').onclick = () => openOnline();
-$('btnCreate').onclick = createRoom;
-$('btnJoin').onclick = joinRoom;
-$('codeInput').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
-$('codeInput').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); });
-$('btnShare').onclick = shareRoom;
-$('btnCancel').onclick = () => { Net.send({ t: 'leave' }); lobbyView(false); lobbyStatus(''); };
-$('onlineBack').onclick = () => { Net.send({ t: 'leave' }); show('menu'); };
 
 // ---------- Логотип ----------
 function logoHTML() {
@@ -2281,9 +1880,6 @@ $('menuLogo').innerHTML = logoHTML();
     if (done) return;
     done = true;
     SFX.boom(); buzz(40);
-    // Ссылка-приглашение вида …#join=1234 — сразу в онлайн-лобби
-    const jm = location.hash.match(/join=(\d{4})/);
-    if (jm) { history.replaceState(null, '', location.pathname); openOnline(jm[1]); return; }
     // Первый запуск: сразу в бесплатный забег — игрок играет уже через секунду.
     // Полное обучение осталось в меню («Как играть»), а в игре подсказывает рука.
     if (!localStorage.getItem('bp-tut') && Wallet.freeLeft() > 0) {
@@ -2320,6 +1916,26 @@ function updateMenu() {
   $('walletNum').textContent = Wallet.balance;
   const best = save.sprintBest;
   $('sprintPrice').innerHTML = (best ? `награда в пуговках · рекорд ${best}` : 'награда в пуговках') + '<br>' + priceHTML();
+  renderDaily();
+}
+
+// Блок в меню: задание дня и серия дней
+function renderDaily() {
+  const t = Task.today(), done = Task.done();
+  $('dailyTask').className = 'dRow' + (done ? ' ok' : '');
+  $('dailyTask').innerHTML = `<span class="ic">${done ? '✅' : '🎯'}</span>
+    <span class="tx">${t.text}<small>задание дня</small></span>
+    <span class="rw">+${ECON.TASK_REWARD} ${PG}</span>`;
+  const played = Streak.playedToday();
+  const n = Streak.current();            // дней подряд (сегодня входит, если уже играли)
+  const need = ECON.STREAK_DAYS;
+  const dots = Array.from({ length: need }, (_, i) => `<i class="${i < Math.min(n, need) ? 'on' : ''}"></i>`).join('');
+  let sub;
+  if (Streak.bonusToday()) sub = 'сегодня +1 бесплатный забег 🎁';
+  else if (played) sub = `ещё ${need - n} дн. до +1 бесплатного забега`;
+  else sub = `сыграй сегодня — до бонуса ${need - n} дн.`;
+  $('dailyStreak').innerHTML = `<span class="ic">🔥</span>
+    <span class="tx">Серия: ${n} дн.<span class="dots3">${dots}</span><small>${sub}</small></span>`;
 }
 
 // ---------- Обучение ----------
@@ -2352,7 +1968,7 @@ const TUT = [
       setSkinClass(box, k);
       tutTimer = setInterval(() => { k = (k % (SKINS.length - 1)) + 1; setSkinClass(box, k); }, 1100);
     } },
-  { t: 'Забег за пуговки', x: '<b>Забег</b> — 2 минуты на очки, за пороги очков — пуговки. Первый забег в день бесплатный.<br>Классика, Аркада и бот — тренировка без наград.',
+  { t: 'Забег за пуговки', x: '<b>Забег</b> — 2 минуты на очки, за пороги очков — пуговки. Первый забег в день бесплатный.<br>Пуговки тратятся на уровни Аркады и стили блоков. Все цены — в «Правилах».',
     demo: el => { el.innerHTML = '<div class="dModes"><span>⏱</span><span class="pg" style="width:46px;height:46px"></span><span>🏆</span></div>'; } },
 ];
 let tutStep = 0, tutTimer = null;
@@ -2401,10 +2017,11 @@ function hintOnce(key, html) {
   localStorage.setItem('bp-h-' + key, '1');
   toast(html);
 }
-function toast(html) {
+// low — внизу экрана, чтобы не закрывать итог забега
+function toast(html, low = false) {
   document.querySelectorAll('.toast').forEach(t => t.remove());
   const d = document.createElement('div');
-  d.className = 'toast';
+  d.className = 'toast' + (low ? ' low' : '');
   d.innerHTML = html;
   document.body.appendChild(d);
   setTimeout(() => d.classList.add('out'), 4200);
@@ -2415,21 +2032,95 @@ function toast(html) {
 function renderCollection() {
   const got = Coll.got(), seen = Coll.seen();
   const pal = ['#ff5d5d', '#36c3ff', '#4fd67a', '#ffd84d'];
+  const poor = Wallet.balance < ECON.SKIN_PRICE;
+  $('collWalletNum').textContent = Wallet.balance;
+  $('skinPrice').innerHTML = `${ECON.SKIN_PRICE} ${PG}`;
   $('collGrid').innerHTML = SKINS.map((s, i) => {
     const open = got.has(s.id);
-    const cls = 'skinCard' + (open ? '' : ' locked') + (i === skinIdx ? ' current' : '') + (open && !seen.has(s.id) ? ' isNew' : '');
+    const cls = 'skinCard' + (open ? '' : ' locked' + (poor ? ' poor' : '')) + (i === skinIdx ? ' current' : '') + (open && !seen.has(s.id) ? ' isNew' : '');
     const cells = pal.map((c, k) => `<div class="cell block" style="--c:${c};--i:${k}"></div>`).join('');
-    return `<div class="${cls}"><div class="skinPrev skin-${open ? s.id : 'classic'}">${cells}</div>
-      ${open ? '' : '<span class="lock">🔒</span>'}<div class="nm">${open ? s.name : '???'}</div></div>`;
+    return `<div class="${cls}" data-i="${i}"><div class="skinPrev skin-${open ? s.id : 'classic'}">${cells}</div>
+      ${open ? '' : `<span class="lock">🔒</span><span class="buyTag">${ECON.SKIN_PRICE} ${PG}</span>`}<div class="nm">${open ? s.name : '???'}</div></div>`;
   }).join('');
+  $('collGrid').querySelectorAll('.skinCard').forEach(card => card.onclick = () => skinTap(+card.dataset.i, card));
   $('collText').textContent = `Собрано ${got.size} из ${SKINS.length}`;
   requestAnimationFrame(() => { $('collBar').style.width = (got.size / SKINS.length * 100) + '%'; });
   Coll.markSeen();
 }
+// Открытый стиль — выбрать; закрытый — купить в два нажатия
+function skinTap(i, card) {
+  const s = SKINS[i];
+  if (Coll.got().has(s.id)) {
+    applySkin(i); SFX.skin();
+    renderCollection();
+    toast(`Стиль «${s.name}» выбран`);
+    return;
+  }
+  if (Wallet.balance < ECON.SKIN_PRICE) {
+    toast(`Не хватает пуговок: стиль стоит ${ECON.SKIN_PRICE} ${PG}<br>Заработайте их в Забеге`);
+    return;
+  }
+  if (!card.classList.contains('confirm')) {
+    card.classList.add('confirm');
+    setTimeout(() => { if (card.isConnected) card.classList.remove('confirm'); }, 3000);
+    return;
+  }
+  Wallet.balance -= ECON.SKIN_PRICE;
+  applySkin(i);
+  SFX.win(); buzz([30, 40, 60]);
+  renderCollection();
+  const w = $('collWallet'); w.classList.remove('bump'); void w.offsetWidth; w.classList.add('bump');
+  toast(`Новый стиль: ${s.name}!`);
+}
+
+// ---------- Экран «Правила и награды» ----------
+function renderRules() {
+  const tiers = ECON.TIERS.map(t => `<tr><td>от ${t.at} очков</td><td>${t.pay} ${PG}</td></tr>`).join('');
+  const lv = [[4, 12], [13, 24], [25, 30]].map(([a, b]) =>
+    `<tr><td>уровни ${a}–${b}</td><td>${ECON.levelPrice(a)} ${PG}</td></tr>`).join('');
+  $('rulesBody').innerHTML = `
+    <div class="rcard"><h3>⏱ Забег</h3><ul>
+      <li>2 минуты: собирай линии и набирай очки. Проиграть нельзя — если ходов нет, поле очищается.</li>
+      <li>Вход: <b>${ECON.FREE_PER_DAY} бесплатный забег в день</b>, дальше — ${ECON.ENTRY} ${PG}.</li>
+      <li>Награда — по порогам очков:</li></ul>
+      <table>${tiers}</table></div>
+    <div class="rcard"><h3>🧵 Аркада</h3><ul>
+      <li>30 уровней: собирай из блоков вещи из швейной шкатулки 🧵🧶🧷🎀🧦🧤.</li>
+      <li>Уровни 1–${ECON.ARCADE_FREE} бесплатные. Следующий открывается после прохождения предыдущего и покупается <b>навсегда</b>:</li></ul>
+      <table>${lv}</table>
+      <ul><li>Аркада пуговок не даёт — их зарабатывают в Забеге.</li></ul></div>
+    <div class="rcard"><h3>🎨 Стили</h3><ul>
+      <li>Открываются бесплатно за 3+ линии одним ходом или покупаются за ${ECON.SKIN_PRICE} ${PG}.</li>
+      <li>Только внешний вид — на очки не влияют.</li></ul></div>
+    <div class="rcard"><h3>🎯 Задание дня и 🔥 серия</h3><ul>
+      <li>Одно задание в день, одинаковое для всех: +${ECON.TASK_REWARD} ${PG}.</li>
+      <li>Играешь в Забег ${ECON.STREAK_DAYS} дня подряд и дольше — каждый день +1 бесплатный забег.</li></ul></div>
+    <div class="rcard"><h3>📏 Лимит</h3><ul>
+      <li>За сутки можно получить не больше <b>${ECON.DAILY_CAP} ${PG}</b> (Забег + задание дня).</li>
+      <li>Новый день — в полночь по вашему времени.</li></ul></div>
+    <div class="rcard honest"><h3>🤝 Честно</h3><ul>
+      <li>Награда зависит <b>только от очков</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
+      <li>Все цены и пороги — на этом экране, они не меняются во время игры.</li></ul></div>`;
+}
+$('btnRules').onclick = () => { renderRules(); show('rules'); };
+
+// Сброс демо — для жюри и тестеров, в два нажатия
+const DEMO_KEYS = ['bp-wallet', 'bp-day', 'bp-owned', 'bp-unlocked', 'bp-streak', 'bp-got', 'bp-seen', 'bp-skin', 'bp-sprint-best'];
+$('btnReset').onclick = () => {
+  const b = $('btnReset');
+  if (!b.classList.contains('confirm')) {
+    b.classList.add('confirm'); b.textContent = 'Точно сбросить? Нажми ещё раз';
+    setTimeout(() => { b.classList.remove('confirm'); b.textContent = '↺ Сбросить демо'; }, 3000);
+    return;
+  }
+  DEMO_KEYS.forEach(k => localStorage.removeItem(k));
+  location.reload();
+};
+
 $('btnCollection').onclick = () => { $('collBar').style.width = '0'; renderCollection(); show('collection'); };
 
-// ---------- «Установить на телефон» ----------
-(function setupInstall() {
+// ---------- Иконка вкладки ----------
+(function setupIcon() {
   // Иконка рисуется кодом — отдельных файлов не нужно
   const cv = document.createElement('canvas');
   cv.width = cv.height = 512;
@@ -2451,52 +2142,20 @@ $('btnCollection').onclick = () => { $('collBar').style.width = '0'; renderColle
   const link = (rel, href) => { const l = document.createElement('link'); l.rel = rel; l.href = href; document.head.appendChild(l); };
   link('icon', png);
   link('apple-touch-icon', png);
-  if (location.protocol.startsWith('http')) {
-    const manifest = {
-      name: GAME_NAME, short_name: GAME_NAME, start_url: location.href.split('#')[0],
-      display: 'standalone', orientation: 'portrait', background_color: '#1d2757', theme_color: '#1d2757',
-      icons: [{ src: png, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }],
-    };
-    link('manifest', 'data:application/manifest+json,' + encodeURIComponent(JSON.stringify(manifest)));
-  }
-
-  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
-  const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-  let deferred = null;
-  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('btnInstall').style.display = ''; });
-  if (iOS && !standalone) $('btnInstall').style.display = '';
-  $('btnInstall').onclick = () => {
-    if (deferred) { deferred.prompt(); deferred = null; $('btnInstall').style.display = 'none'; return; }
-    hintOnce('ios-' + Date.now(), 'Чтобы установить игру: нажми <b>«Поделиться»</b> ⬆️<br>и выбери <b>«На экран Домой»</b>');
-  };
 })();
 
 applySkin(skinIdx);
-if (!localStorage.getItem('bp-seen')) Coll.markSeen(); // стартовая «Классика» — не новинка
+if (!localStorage.getItem('bp-seen')) Coll.markSeen(); // стартовый стиль — не новинка
 updateMenu();
-$('btnClassic').onclick = () => startGame('classic');
 $('btnSprint').onclick = playSprint;
 $('sprintAgain').onclick = playSprint;
 $('sprintMenu').onclick = () => show('menu');
-// Конкурсная версия: онлайн-бой скрыт (голосующие играют в одиночку,
-// а внешний сервер не нужен для проверки). Вернуть — поставить true.
-const SHOW_ONLINE = false;
-if (!SHOW_ONLINE) $('btnOnline').style.display = 'none';
 $('btnArcade').onclick = () => { renderLevels(); show('levels'); };
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go));
 $('btnBack').onclick = () => {
-  stopDuel(); finished = true;
-  if (mode === 'online') { Net.send({ t: 'leave' }); show('menu'); return; }
+  stopRun(); finished = true;
   if (mode === 'arcade') { renderLevels(); show('levels'); } else show('menu');
 };
-$('btnDuel').onclick = () => startGame('duel');
-$('duelAgain').onclick = () => {
-  if (mode !== 'online') return startGame('duel');
-  Net.send({ t: 'rematch' });
-  $('duelAgain').disabled = true;
-  $('duelText').insertAdjacentHTML('beforeend', '<br><small>Ждём соперника…</small>');
-};
-$('duelMenu').onclick = () => { if (mode === 'online') Net.send({ t: 'leave' }); show('menu'); };
 $('btnRestart').onclick = () => startGame(mode, level);
 $('loseRetry').onclick = () => startGame(mode, level);
 $('loseMenu').onclick = () => $('btnBack').onclick();
