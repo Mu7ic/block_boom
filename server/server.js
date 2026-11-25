@@ -1,5 +1,5 @@
 // Сервер онлайн-боя «Блок Бум!»
-// - отдаёт игру (../index.html) по HTTP
+// - отдаёт игру (../index-boom.html — версия с онлайн-боем) по HTTP
 // - по WebSocket на /ws держит комнаты на двоих: код из 4 цифр, общий таймер 3 минуты,
 //   пересылает сопернику состояние поля, в конце сам объявляет итог.
 //
@@ -12,7 +12,8 @@ const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.PORT) || 8765;
 const HOST = process.env.HOST || '0.0.0.0';
-const GAME_FILE = path.join(__dirname, '..', 'index.html');
+// Онлайн-бой есть только в личной версии «Блок Бум!»; конкурсные игры лежат в games/
+const GAME_FILE = path.join(__dirname, '..', 'index-boom.html');
 
 const COUNTDOWN = 3000;          // отсчёт «3-2-1» перед стартом, мс
 const DURATION = Number(process.env.DURATION_MS) || 180000; // длительность боя, мс (для тестов можно сократить)

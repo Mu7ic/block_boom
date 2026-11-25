@@ -97,8 +97,8 @@
   .comboBar{height:24px;display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px}
   .comboBar .x{background:var(--accent-text);color:#fff;border-radius:999px;padding:2px 10px}
   #stage{position:relative;width:100%;max-width:440px;flex:1;min-height:0}
-  #cv{position:absolute;inset:0;width:100%;height:100%;border-radius:22px;touch-action:none}
-  .gameHint{font-size:15px;font-weight:600;color:var(--accent-text);text-align:center;min-height:20px}
+  #cv{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:22px;touch-action:none}
+  .gameHint{font-size:15px;font-weight:600;color:var(--accent-text);text-align:center;min-height:40px;display:flex;align-items:center;justify-content:center}
   .float{position:absolute;left:50%;transform:translate(-50%,-50%);font-weight:900;font-size:30px;pointer-events:none;
     white-space:nowrap;animation:rise 1.1s ease-out forwards;color:var(--ink);text-shadow:0 2px 0 rgba(255,253,247,.9)}
   .float small{display:block;text-align:center;font-size:16px}
@@ -154,6 +154,17 @@
     .big{padding:12px 0;font-size:21px}
     .stat b{font-size:22px}
   }
+
+  /* Рука-подсказка в первом забеге */
+  #hand{position:fixed;left:0;top:0;font-size:42px;z-index:25;pointer-events:none;
+    filter:drop-shadow(0 4px 6px rgba(31,39,66,.35));animation:handMove 1.9s ease-in-out infinite}
+  #hand.tap{animation:handTap 1.1s ease-in-out infinite}
+  @keyframes handMove{0%,10%{transform:translate(var(--x0),var(--y0)) scale(1);opacity:0}
+    20%{opacity:1;transform:translate(var(--x0),var(--y0)) scale(.85)}
+    70%{transform:translate(var(--x1),var(--y1)) scale(.85);opacity:1}
+    90%,100%{transform:translate(var(--x1),var(--y1)) scale(1);opacity:0}}
+  @keyframes handTap{0%,100%{transform:translate(var(--x0),var(--y0)) scale(1)}
+    45%{transform:translate(var(--x0),var(--y0)) scale(.8)}}
 </style>
 </head>
 <body>
@@ -232,14 +243,14 @@ const ECON = {
   START_WALLET: 100,
   FREE_PER_DAY: 1,
   ENTRY: 10,
-  // Пороги подобраны симуляцией (100 забегов на тип игрока по трассе дня):
-  // медиана новичок ~400, средний ~700, хороший ~1235, сильный ~1660.
+  // Пороги подобраны симуляцией (150 забегов на тип игрока по трассе дня, стол 1:1.62,
+  // с пунктиром на первых 2 щелчках): медиана новичок ~550, средний ~850, хороший ~1300, сильный ~1800.
   TIERS: [
-    { at: 330, pay: 2 },
-    { at: 650, pay: 5 },
-    { at: 1050, pay: 8 },
-    { at: 1550, pay: 12 },
-    { at: 2100, pay: 16 },
+    { at: 420, pay: 2 },
+    { at: 780, pay: 5 },
+    { at: 1200, pay: 8 },
+    { at: 1700, pay: 12 },
+    { at: 2250, pay: 16 },
   ],
   DAILY_CAP: 60,
   STREAK_DAYS: 3,
@@ -251,7 +262,8 @@ const ZONES = [            // доля радиуса мишени → очки
   { k: .64, pts: 50, name: 'Хорошо!' },
   { k: 1, pts: 20, name: 'Есть' },
 ];
-const RICOCHET_BONUS = 25;  // отскок от борта или катушки и попадание в 50+
+const RICOCHET_BONUS = 25;
+const TRAIL_SHOTS = 2;      // на первых щелчках показываем путь — обучение  // отскок от борта или катушки и попадание в 50+
 
 // ---------- День, серия, кошелёк ----------
 function dateKey(shift = 0) {
@@ -343,6 +355,7 @@ function refreshSound() { $('btnSound').textContent = $('btnSound2').textContent
 });
 
 function show(id) {
+  hideHand();
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id));
   document.querySelectorAll('.overlay').forEach(o => o.style.display = 'none');
   if (id === 'menu') renderMenu();
@@ -457,9 +470,17 @@ function makeCourse(seed) {
 const cv = $('cv'), ctx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1, felt = null;
 let DECEL = 300, VMAX = 800, BR = 16, WALL = 10;
+// Стол всегда одних пропорций (высота = 1.62 ширины) и вписывается в экран:
+// физика и размеры мишеней одинаковы на любом телефоне — честно для всех.
+const TABLE_RATIO = 1.62;
 function resize() {
-  const r = cv.getBoundingClientRect();
-  if (!r.width) return;
+  const st = $('stage').getBoundingClientRect();
+  if (!st.width) return;
+  let tw = st.width, th = st.width * TABLE_RATIO;
+  if (th > st.height) { th = st.height; tw = th / TABLE_RATIO; }
+  cv.style.width = tw + 'px'; cv.style.height = th + 'px';
+  cv.style.left = (st.width - tw) / 2 + 'px'; cv.style.top = (st.height - th) / 2 + 'px';
+  const r = { width: tw, height: th };
   DPR = Math.min(devicePixelRatio || 1, 2);
   W = r.width; H = r.height;
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
@@ -467,7 +488,7 @@ function resize() {
   DECEL = H * .55;                              // замедление от трения, px/с²
   VMAX = Math.sqrt(2 * DECEL * H * 1.25);       // максимум — чуть больше длины стола
   BR = Math.max(13, Math.min(W, H) * .045);
-  WALL = 10;
+  WALL = Math.round(W * .03);                  // борт тоже в пропорции стола
   felt = document.createElement('canvas'); felt.width = cv.width; felt.height = cv.height;
   const f = felt.getContext('2d'); f.setTransform(DPR, 0, 0, DPR, 0, 0);
   f.fillStyle = '#E9E8FF'; f.fillRect(0, 0, W, H);
@@ -574,6 +595,7 @@ function flick(dx, dy, p) {
   const v = VMAX * Math.sqrt(p);
   G.ball.vx = dx * v; G.ball.vy = dy * v;
   G.state = 'move'; G.moveT = 0;
+  if (!G.started) { G.started = true; onFirstStart(); }
   $('gameHint').textContent = '';
   SFX.flick(p); buzz(15);
 }
@@ -622,7 +644,7 @@ function renderCombo() {
 function floatAt(main, sub, cls, x, y) {
   const d = document.createElement('div');
   d.className = 'float ' + cls;
-  d.style.left = Math.max(70, Math.min(W - 70, x)) + 'px'; d.style.top = Math.max(40, y) + 'px';
+  d.style.left = cv.offsetLeft + Math.max(70, Math.min(W - 70, x)) + 'px'; d.style.top = cv.offsetTop + Math.max(40, y) + 'px';
   d.innerHTML = main + (sub ? `<small>${sub}</small>` : '');
   $('stage').appendChild(d);
   setTimeout(() => d.remove(), 1100);
@@ -661,6 +683,17 @@ function draw() {
     // Кольцо силы вокруг пуговицы
     ctx.strokeStyle = '#6260C6'; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(b.x, b.y, BR + 9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * a.p); ctx.stroke();
+    // Обучение: на первых двух щелчках виден путь пуговицы (та же физика, что в игре)
+    if (G.shot < TRAIL_SHOTS) {
+      const v = VMAX * Math.sqrt(a.p), q = { x: b.x, y: b.y, vx: a.dx * v, vy: a.dy * v, spin: 0 };
+      ctx.fillStyle = 'rgba(98,96,198,.55)';
+      for (let k = 0; k < 900 && Math.hypot(q.vx, q.vy) >= 4; k++) {
+        step(q, G.L, 1 / 120);
+        if (k % 7 === 6) { ctx.beginPath(); ctx.arc(q.x, q.y, 2.6, 0, Math.PI * 2); ctx.fill(); }
+      }
+      ctx.strokeStyle = 'rgba(98,96,198,.8)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(q.x, q.y, BR, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
   } else if (G.state === 'aim' && G.fade >= 1) {
     // Пуговица «дышит», приглашая потянуть
     const k = .5 + .5 * Math.sin(G.t * 5);
@@ -703,7 +736,7 @@ function loop(now) {
   draw();
 }
 
-function startRun() {
+function startRun(pending = false) {
   show('game');
   resize();
   newRun();
@@ -712,6 +745,8 @@ function startRun() {
   $('comboBar').innerHTML = '';
   last = 0;
   if (!raf) raf = requestAnimationFrame(loop);
+  G.pendingPay = pending;
+  setTimeout(maybeHand, 500);
 }
 function play() {
   const how = Wallet.pay();
@@ -806,7 +841,8 @@ function renderRules() {
       <li>Где остановилась, столько и очков: центр — <b>100</b>, среднее кольцо — <b>50</b>, внешнее — <b>20</b>.</li>
       <li>Попадания подряд — множитель: ×1,5, ×2, ×2,5, до ×3. Мимо — серия сначала.</li>
       <li>Отскок от борта или катушки и попадание в 50 или 100 — <b>рикошет +${RICOCHET_BONUS}</b>.</li>
-      <li>С каждым щелчком мишень дальше и меньше, появляются катушки.</li></ul></div>
+      <li>С каждым щелчком мишень дальше и меньше, появляются катушки.</li>
+      <li>На первых  щелчках виден путь пуговицы — потренироваться (у всех одинаково).</li></ul></div>
     <div class="rcard"><h3>📅 Трасса дня</h3><ul>
       <li>Расстановка мишеней и катушек <b>одинаковая для всех</b> в этот день и меняется в полночь.</li></ul></div>
     <div class="rcard"><h3>🎟 Вход</h3><ul>
@@ -830,7 +866,7 @@ $('btnReset').onclick = () => {
     setTimeout(() => { b.classList.remove('confirm'); b.textContent = '↺ Сбросить демо'; }, 3000);
     return;
   }
-  ['wallet', 'day', 'streak', 'skins', 'skin', 'best'].forEach(k => localStorage.removeItem(KEY(k)));
+  ['wallet', 'day', 'streak', 'skins', 'skin', 'best', 'seen', 'hand'].forEach(k => localStorage.removeItem(KEY(k)));
   location.reload();
 };
 
@@ -843,8 +879,36 @@ $('btnReset').onclick = () => {
   const l = document.createElement('link'); l.rel = 'icon'; l.href = c.toDataURL(); document.head.appendChild(l);
 })();
 
+// ---------- Первый запуск: сразу в игру, рука показывает, что делать ----------
+// Бесплатная попытка списывается только при первом касании — открыл и ушёл в меню, попытка цела.
+function onFirstStart() {
+  hideHand();
+  localStorage.setItem(KEY('hand'), '1');
+  if (G && G.pendingPay) { G.pendingPay = false; Wallet.pay(); }
+}
+function handPath() {
+  const r = cv.getBoundingClientRect(), b = G.ball;
+  return [r.left + b.x, r.top + b.y, r.left + b.x - 10, r.top + b.y + Math.min(110, H * .16)];
+}
+function maybeHand() {
+  if (!G || G.started || localStorage.getItem(KEY('hand')) || !$('game').classList.contains('active')) return;
+  const p = handPath(); if (!p) return;
+  hideHand();
+  const h = document.createElement('div');
+  h.id = 'hand'; h.textContent = '👆';
+  if (p[0] === p[2] && p[1] === p[3]) h.className = 'tap';
+  [['--x0', p[0]], ['--y0', p[1]], ['--x1', p[2]], ['--y1', p[3]]].forEach(([k, v], i) =>
+    h.style.setProperty(k, (v - (i % 2 ? 6 : 14)) + 'px'));
+  document.body.appendChild(h);
+}
+function hideHand() { const h = document.getElementById('hand'); if (h) h.remove(); }
+
 refreshSound();
 renderMenu();
+if (!localStorage.getItem(KEY('seen'))) {
+  localStorage.setItem(KEY('seen'), '1');
+  if (Wallet.freeLeft() > 0) startRun(true);
+}
 </script>
 </body>
 </html>
