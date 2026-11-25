@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#FFFDF7">
+<title>Игры для «Пуговок» — тестовая витрина</title>
+<style>
+  /* Тестовая страница со ссылками на игры — не для сдачи на конкурс */
+  :root{--ink:#1F2742;--accent-text:#6260C6;--accent-bg:#E9E8FF;--graphic:#E8623E;--el-bg:#FFF4DF;--page:#FFFDF7;--btn:#FED78C}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    padding:24px 16px 40px;display:flex;flex-direction:column;align-items:center}
+  h1{margin:8px 0 4px;font-size:30px;text-align:center}
+  .sub{color:var(--accent-text);font-weight:600;margin:0 0 20px;text-align:center}
+  .list{width:min(440px,100%);display:flex;flex-direction:column;gap:10px}
+  a.game{display:flex;align-items:center;gap:14px;background:var(--el-bg);border-radius:18px;padding:14px 16px;
+    color:inherit;text-decoration:none;box-shadow:inset 0 0 0 1.5px rgba(31,39,66,.06)}
+  a.game:active{transform:scale(.98)}
+  .ic{font-size:30px;width:40px;text-align:center}
+  .t{font-weight:800;font-size:18px}
+  .d{font-size:13px;opacity:.7;margin-top:2px}
+  .go{margin-left:auto;background:var(--btn);border-radius:999px;padding:8px 14px;font-weight:800;font-size:14px}
+  .note{width:min(440px,100%);margin-top:18px;font-size:13px;opacity:.7;line-height:1.45;text-align:center}
+  .note a{color:var(--accent-text)}
+</style>
+</head>
+<body>
+  <h1>Игры для «Пуговок»</h1>
+  <p class="sub">тестовая витрина · откройте на телефоне</p>
+  <div class="list">
+    <a class="game" href="games/block_boom/"><span class="ic">🧩</span><span><div class="t">Блок Бум!</div><div class="d">блоки 8×8 · забег 2 минуты · аркада</div></span><span class="go">Играть</span></a>
+    <a class="game" href="games/prishey-pugovku/"><span class="ic">🪡</span><span><div class="t">Пришей пуговку</div><div class="d">игла над дырочкой · 90 секунд</div></span><span class="go">Играть</span></a>
+    <a class="game" href="games/shchelchok/"><span class="ic">👆</span><span><div class="t">Пуговичный щелчок</div><div class="d">щелчки по мишени · 10 ударов</div></span><span class="go">Играть</span></a>
+    <a class="game" href="games/shkatulka/"><span class="ic">🧺</span><span><div class="t">Шкатулка</div><div class="d">сортировка на скорость · 60 секунд</div></span><span class="go">Играть</span></a>
+    <a class="game" href="games/sliyanie/"><span class="ic">✨</span><span><div class="t">Пуговичное слияние</div><div class="d">слей до золотой · 90 секунд</div></span><span class="go">Играть</span></a>
+    <a class="game" href="games/bashnya/"><span class="ic">🏗</span><span><div class="t">Пуговичная башня</div><div class="d">равновесие и сшивание · 90 секунд</div></span><span class="go">Играть</span></a>
+  </div>
+  <p class="note">Каждая игра хранит своё демо (баланс, рекорд) на этом устройстве.
+    Начать заново — «Правила» → «Сбросить демо».<br>
+    Личная версия «Блок Бум!» с онлайн-боем: <a href="index-boom.html">index-boom.html</a> (онлайн работает только с сервером).</p>
+</body>
+</html>
