@@ -35,6 +35,9 @@
   .topbar{width:100%;max-width:440px;display:flex;justify-content:space-between;align-items:center;min-height:40px;gap:8px}
   .corner{font-size:14px;padding:8px 14px}
   .tog{font-size:16px;padding:8px 12px}
+  /* Маленькие кнопки: невидимая зона касания не меньше ~44px */
+  .corner,.tog{position:relative}
+  .corner::after,.tog::after{content:'';position:absolute;inset:-5px}
   .wallet{display:flex;align-items:center;gap:7px;background:var(--el-bg);border-radius:999px;
     padding:7px 14px 7px 9px;font-weight:800;font-size:18px;font-variant-numeric:tabular-nums;
     box-shadow:inset 0 0 0 1.5px rgba(31,39,66,.06)}
@@ -408,7 +411,9 @@ const SFX = {
   end() { Sound.tone(392, .3, 'triangle', .1); Sound.tone(262, .4, 'triangle', .1, .2); },
 };
 function buzz(p) { if (navigator.vibrate) try { navigator.vibrate(p); } catch (e) {} }
-document.addEventListener('pointerdown', () => Sound.unlock(), true);
+// Звук включается после жеста игрока; iOS/Android засчитывают жест на отпускании пальца, поэтому слушаем несколько событий
+['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, () => Sound.unlock(), true));
+document.addEventListener('contextmenu', e => e.preventDefault()); // долгое касание не открывает меню
 function refreshSound() { $('btnSound').textContent = $('btnSound2').textContent = Sound.on ? '🔊' : '🔇'; }
 [$('btnSound'), $('btnSound2')].forEach(b => b.onclick = () => {
   Sound.on = !Sound.on; localStorage.setItem(KEY('sound'), Sound.on ? '1' : '0'); refreshSound();
@@ -529,6 +534,7 @@ board.addEventListener('pointerdown', e => {
 });
 board.addEventListener('pointermove', e => {
   if (!drag) return;
+  if (!G || G.S.over) { drag = null; $('drag').style.display = 'none'; return; }
   if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 8) return;
   const d = $('drag');
   if (!drag.moved) {
@@ -544,6 +550,7 @@ function endDrag(e) {
   if (!drag) return;
   const dd = drag; drag = null;
   $('drag').style.display = 'none';
+  if (!G || G.S.over) return;                     // забег уже закончился или игрок ушёл в меню
   if (!dd.moved) return;                         // это был тап — выбор остаётся
   const j = cellAt(e.clientX, e.clientY - 20);
   if (j >= 0 && j !== dd.i && tryMerge(dd.i, j)) return;
@@ -640,6 +647,7 @@ function startRun(pending = false) {
 }
 addEventListener('resize', () => { if (G && $('game').classList.contains('active')) { layoutBoard(); renderBoard(); } });
 function play() {
+  if (G && !G.S.over && $('game').classList.contains('active')) return; // двойное нажатие: забег уже идёт, второй раз не списываем
   const how = Wallet.pay();
   if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
   startRun();
@@ -669,12 +677,13 @@ function endRun(why) {
   again.disabled = !Wallet.canPlay();
   again.innerHTML = Wallet.freeLeft() > 0 ? 'Ещё раз · бесплатно' : Wallet.canPlay() ? `Ещё раз · ${ECON.ENTRY} ${PG}` : 'Не хватает пуговок';
   const el = $('overEarn'); el.textContent = '0';
+  const runG = G; // итог показываем только для этого забега (игрок мог уйти и начать новый)
   setTimeout(() => {
-    if (!$('game').classList.contains('active')) return;
+    if (G !== runG || !$('game').classList.contains('active')) return;
     $('over').style.display = 'flex';
     if (earned > 0) { SFX.win(); buzz([40, 60, 40, 60, 120]); } else SFX.end();
     let k = 0;
-    const id = setInterval(() => { el.textContent = Math.min(++k, earned); if (k >= earned) clearInterval(id); else SFX.tick(); }, 70);
+    const id = setInterval(() => { el.textContent = Math.min(++k, earned); if (k >= earned || $('over').style.display !== 'flex') clearInterval(id); else SFX.tick(); }, 70);
   }, 400);
 }
 $('btnPlay').onclick = play;
@@ -835,6 +844,9 @@ function maybeHand() {
   document.body.appendChild(h);
 }
 function hideHand() { const h = document.getElementById('hand'); if (h) h.remove(); }
+
+// Поворот экрана в первом забеге — рука переезжает к новому месту
+addEventListener('resize', () => { if (document.getElementById('hand')) maybeHand(); });
 
 refreshSound();
 renderMenu();

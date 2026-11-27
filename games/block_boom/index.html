@@ -204,6 +204,9 @@
     background:#ff8fc8;transform:rotate(-45deg);border-radius:2px}
   .cornerR{position:fixed;top:calc(12px + var(--top));right:12px;display:flex;gap:8px;z-index:5}
   .cbtn{font-size:13px;padding:8px 14px;margin:0;background:rgba(255,255,255,.12);color:#fff}
+  /* Маленькие кнопки в углах: невидимая зона касания не меньше ~44px */
+  .cbtn{position:relative}
+  .corner::after,.cbtn::after{content:'';position:absolute;inset:-5px}
 
   /* ---------- Обучение ---------- */
   #tutorial{z-index:40}
@@ -750,7 +753,9 @@ function buzz(p) {
   try { navigator.vibrate(p); } catch (e) {}
 }
 
-document.addEventListener('pointerdown', () => Sound.unlock(), true);
+// iOS/Android засчитывают жест на отпускании пальца — слушаем несколько событий, чтобы звук включился с первого касания
+['pointerdown', 'pointerup', 'touchend', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, () => Sound.unlock(), true));
+document.addEventListener('contextmenu', e => e.preventDefault()); // долгое касание не открывает меню
 document.addEventListener('click', e => { if (e.target.closest('button')) SFX.click(); });
 document.addEventListener('visibilitychange', () => {
   if (!Sound.ctx) return;
@@ -1618,7 +1623,11 @@ window.addEventListener('pointercancel', endDrag);
 
 // ---------- Ход ----------
 function place(i, p, r, c) {
-  if (mode === 'sprint' && run && !run.timerId) runSprintClock();
+  if (mode === 'sprint' && run && !run.timerId) {
+    // Первый запуск: бесплатная попытка списывается только при первом ходе — ушёл в меню раньше, попытка цела
+    if (run.pendingPay) { run.pendingPay = false; Wallet.pay(); }
+    runSprintClock();
+  }
   if (!localStorage.getItem('bp-h-drag')) { localStorage.setItem('bp-h-drag', '1'); hideDragHint(); }
   const placed = p.cells.map(([dr, dc, f]) => {
     const idx = (r + dr) * N + c + dc;
@@ -1898,13 +1907,14 @@ function endSprint() {
   const el = $('sprintEarn');
   el.textContent = '0';
   setTimeout(() => {
-    if (!$('game').classList.contains('active')) return; // игрок уже ушёл с экрана игры
+    // игрок уже ушёл с экрана игры или начал новую игру
+    if (!finished || !$('game').classList.contains('active')) return;
     $('overSprint').style.display = 'flex';
     if (earned > 0) { SFX.win(); buzz([40, 60, 40, 60, 120]); } else SFX.record();
     let k = 0;
     const id = setInterval(() => {
       el.textContent = ++k > earned ? earned : k;
-      if (k >= earned) clearInterval(id); else SFX.tick();
+      if (k >= earned || $('overSprint').style.display !== 'flex') clearInterval(id); else SFX.tick();
     }, 70);
   }, 600);
 }
@@ -1917,6 +1927,7 @@ function refreshSprintAgain() {
 }
 
 function playSprint() {
+  if (run && $('game').classList.contains('active')) return; // двойное нажатие: забег уже идёт, второй раз не списываем
   const how = Wallet.pay();
   if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
   startGame('sprint');
@@ -1993,7 +2004,8 @@ $('menuLogo').innerHTML = logoHTML();
     if (!localStorage.getItem('bp-tut') && Wallet.freeLeft() > 0) {
       localStorage.setItem('bp-tut', '1');
       updateMenu();
-      playSprint();
+      startGame('sprint');
+      run.pendingPay = true; // спишется при первом ходе (см. place)
       return;
     }
     show('menu');

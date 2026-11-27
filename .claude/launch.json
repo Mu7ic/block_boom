@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["server/server.js"],
       "port": 8765
+    },
+    {
+      "name": "pugovki",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8770", "--bind", "127.0.0.1"],
+      "port": 8770
     }
   ]
 }
