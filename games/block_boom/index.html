@@ -304,6 +304,12 @@
   .tiers i b{font-size:14px}
   .tiers i.got{opacity:1;background:rgba(79,214,122,.35)}
   .nextTier{font-size:14px;opacity:.75}
+  /* Разбивка награды на итоге забега: порог → награда */
+  .lines{width:100%;display:flex;flex-direction:column;gap:3px;margin-top:4px}
+  .lines .ln{display:flex;align-items:center;gap:8px;font-size:14px;line-height:1.25;background:var(--page, #FFFDF7);color:var(--ink, #1F2742);border-radius:10px;padding:6px 10px}
+  .lines .ln span{flex:1}
+  .lines .ln b{display:flex;align-items:center;gap:3px;flex:none;font-size:16px}
+  .lines .ln.cap{background:none;padding:2px 10px;color:var(--graphic, #E8623E);font-weight:700;font-size:13px}
   .walletLine{font-size:15px;opacity:.8;display:flex;align-items:center;gap:6px}
   #sprintAgain[disabled]{opacity:.45}
 
@@ -572,6 +578,7 @@
   <div class="res">
     <p>Счёт: <b id="sprintScore">0</b></p>
     <div class="earn">+<span id="sprintEarn">0</span><span class="pg"></span></div>
+    <div class="lines" id="sprintLines"></div>
     <div class="tiers" id="sprintTiers"></div>
     <div class="nextTier" id="sprintNext"></div>
   </div>
@@ -1624,8 +1631,12 @@ window.addEventListener('pointercancel', endDrag);
 // ---------- Ход ----------
 function place(i, p, r, c) {
   if (mode === 'sprint' && run && !run.timerId) {
-    // Первый запуск: бесплатная попытка списывается только при первом ходе — ушёл в меню раньше, попытка цела
-    if (run.pendingPay) { run.pendingPay = false; Wallet.pay(); }
+    // Вход (бесплатный или платный) списывается только при первом ходе — ушёл в меню раньше, ничего не списано.
+    // Флаг снимается до списания, поэтому второй раз не спишется.
+    if (run.pendingPay) {
+      run.pendingPay = false;
+      if (Wallet.pay() === 'paid') floatText(`−${ECON.ENTRY}`, 'вход в забег', 1, true);
+    }
     runSprintClock();
   }
   if (!localStorage.getItem('bp-h-drag')) { localStorage.setItem('bp-h-drag', '1'); hideDragHint(); }
@@ -1889,7 +1900,8 @@ function endSprint() {
   stopRun();
   finished = true;
   if (drag) endDrag();
-  const earned = Wallet.credit(Wallet.rewardFor(score));
+  const reward = Wallet.rewardFor(score);
+  const earned = Wallet.credit(reward);
   Task.event('sprintEnd', { score, lines });
   if (score > save.sprintBest) save.sprintBest = score;
   $('sprintScore').textContent = score;
@@ -1897,9 +1909,14 @@ function endSprint() {
   $('sprintTiers').innerHTML = ECON.TIERS.map(t =>
     `<i class="${score >= t.at ? 'got' : ''}"><b>${t.pay}</b>${t.at}</i>`).join('');
   const next = ECON.TIERS.find(t => score < t.at);
-  const capHit = earned < Wallet.rewardFor(score);
-  $('sprintNext').innerHTML = capHit ? 'Дневной лимит наград исчерпан — приходите завтра'
-    : next ? `До награды ${next.pay} ${PG} не хватило ${next.at - score} очков`
+  const capHit = earned < reward;
+  // Разбивка «за что заплачено»: пройденный порог → награда (и дневной лимит, если упёрлись)
+  const got = ECON.TIERS.filter(t => score >= t.at).pop();
+  $('sprintLines').innerHTML = (got
+    ? `<div class="ln"><span>Счёт ${score} · порог ${got.at} очков</span><b>+${got.pay} ${PG}</b></div>`
+    : `<div class="ln"><span>Счёт ${score} · первый порог — ${ECON.TIERS[0].at} очков</span><b>0 ${PG}</b></div>`)
+    + (capHit ? `<div class="ln cap"><span>Дневной лимит ${ECON.DAILY_CAP} ${PG}: начислено ${earned} из ${reward}</span></div>` : '');
+  $('sprintNext').innerHTML = next ? `Ещё ${next.at - score} очков — порог ${next.at} → +${next.pay} ${PG}`
     : 'Максимальная награда! 👑';
   $('sprintWallet').textContent = Wallet.balance;
   refreshSprintAgain();
@@ -1928,10 +1945,9 @@ function refreshSprintAgain() {
 
 function playSprint() {
   if (run && $('game').classList.contains('active')) return; // двойное нажатие: забег уже идёт, второй раз не списываем
-  const how = Wallet.pay();
-  if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
+  if (!Wallet.canPlay()) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
   startGame('sprint');
-  if (how === 'paid') floatText(`−${ECON.ENTRY}`, 'вход в забег', 1, true);
+  run.pendingPay = true; // вход спишется при первом ходе (см. place)
 }
 
 function startGame(m, n) {

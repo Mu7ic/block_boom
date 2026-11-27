@@ -117,11 +117,13 @@
   .res .sub{font-size:14px;opacity:.7;text-align:center}
   .earn{display:flex;align-items:center;gap:10px;font-size:46px;font-weight:900;color:var(--graphic)}
   .earn .pg{width:44px;height:44px}
-  .tiers{display:flex;gap:4px;margin-top:4px}
-  .tiers i{display:flex;flex-direction:column;align-items:center;font-style:normal;font-size:11px;opacity:.5;
-    background:var(--accent-bg);border-radius:8px;padding:4px 6px;min-width:44px}
-  .tiers i b{font-size:14px}
-  .tiers i.got{opacity:1;background:var(--accent-text);color:#fff}
+  /* Разбивка награды: строка = за что и сколько */
+  .lines{display:flex;flex-direction:column;width:100%;max-width:300px;font-size:15px;margin-top:2px}
+  .lines > div{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:3px 0;border-bottom:1px dashed rgba(31,39,66,.14)}
+  .lines b{display:flex;align-items:center;gap:4px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .lines .none{opacity:.6}
+  .lines .tot{border-bottom:0;font-weight:800}
+  .lines .cap{display:block;border-bottom:0;color:var(--graphic);font-size:13px;font-weight:700;text-align:center}
   .nextTier{font-size:14px;opacity:.75;text-align:center}
   .walletLine{font-size:15px;opacity:.85;display:flex;align-items:center;gap:6px}
   .row{display:flex;gap:12px}
@@ -230,7 +232,7 @@
     <p>Счёт: <b id="overScore">0</b></p>
     <div class="sub" id="overStats"></div>
     <div class="earn">+<span id="overEarn">0</span><span class="pg"></span></div>
-    <div class="tiers" id="overTiers"></div>
+    <div class="lines" id="overTiers"></div>
     <div class="nextTier" id="overNext"></div>
     <div class="taskLine" id="overTask"></div>
   </div>
@@ -252,14 +254,13 @@ const ECON = {
   START_WALLET: 100,
   FREE_PER_DAY: 1,
   ENTRY: 10,
-  // Пороги подобраны симуляцией (400 забегов на тип игрока по набору дня):
-  // медиана новичок ~585, средний ~1000, хороший ~1600, сильный ~2100.
-  TIERS: [
-    { at: 550, pay: 2 },
-    { at: 950, pay: 5 },
-    { at: 1500, pay: 8 },
-    { at: 2000, pay: 12 },
-    { at: 2400, pay: 16 },
+  // Награда — за высоту: каждый шов (5 устоявших пуговиц сшиты) платит по своей высоте,
+  // чем выше, тем дороже: швы на высоте 5–15 — 0, 20–35 — по 1, с 40 — по 2.
+  // Подобрано симуляцией (400 забегов на тип × 3 набора дня): швов в среднем новичок ~4,7,
+  // средний ~6,6, хороший ~8,6, сильный ~10,7 → выплата ~1,9 / 4,2 / 7,4 / 11,4, в среднем ≈ 4,9 из 10.
+  SEAM_PAY: [
+    { from: 20, pay: 1 },
+    { from: 40, pay: 2 },
   ],
   DAILY_CAP: 60,
   STREAK_DAYS: 3,
@@ -302,7 +303,6 @@ const Wallet = {
     if (how) Streak.touch();
     return how;
   },
-  rewardFor(score) { let p = 0; for (const t of ECON.TIERS) if (score >= t.at) p = t.pay; return p; },
   credit(n) {
     const d = this.day(); const got = Math.max(0, Math.min(n, ECON.DAILY_CAP - d.earned));
     d.earned += got; this.saveDay(d); this.balance += got; return got;
@@ -483,6 +483,23 @@ function place(S, x) {
   S.next = nextDisc(S);
   return { kind, pts, stitched };
 }
+// Награда за забег — одна функция для экрана итога, счётчика в игре, линейки и симуляции.
+// Шов k (k = 1, 2, …) лежит на высоте k·STITCH_EVERY; сколько он стоит — по таблице ECON.SEAM_PAY.
+function seamPay(h) { let p = 0; for (const s of ECON.SEAM_PAY) if (h >= s.from) p = s.pay; return p; }
+function rewardOf(st) {
+  const groups = [];
+  for (let k = 1; k <= st.stitches; k++) {
+    const h = k * STITCH_EVERY, p = seamPay(h); if (!p) continue;
+    const g = groups.find(x => x.each === p);
+    if (g) { g.to = h; g.qty++; } else groups.push({ each: p, from: h, to: h, qty: 1 });
+  }
+  const lines = groups.map(g => ({ label: `швы на высоте ${g.from === g.to ? g.from : g.from + '–' + g.to}`, qty: g.qty, each: g.each, sum: g.qty * g.each }));
+  const total = lines.reduce((a, l) => a + l.sum, 0);
+  const nh = (st.stitches + 1) * STITCH_EVERY; let ph = nh;
+  while (!seamPay(ph)) ph += STITCH_EVERY;
+  const next = ph === nh ? `Следующий шов — на высоте ${nh}: +${seamPay(nh)}` : `Первые пуговки — за шов на высоте ${ph}: +${seamPay(ph)}`;
+  return { total, lines, next };
+}
 
 // ---------- Отрисовка и ввод ----------
 const cv = $('cv'), ctx = cv.getContext('2d');
@@ -511,7 +528,7 @@ function handX() { return Math.sin(G.S.ph) * AMP; }
 
 function tap() {
   if (!G || G.S.over || G.drop || G.fallAnim > 0) return;
-  if (!G.started) { G.started = true; onFirstStart(); $('gameHint').textContent = ''; }
+  if (!G.started) { G.started = true; if (!onFirstStart()) return; $('gameHint').textContent = ''; }
   G.drop = { x: handX(), y: HAND_Y + G.cam + TH * 2.2, vy: 0, w: G.S.next.w, c: G.S.next.c };
   SFX.snip(); buzz(8);
 }
@@ -534,7 +551,10 @@ function landed() {
     else if (r.kind === 'good') { floatAt(`+${r.pts}`, 'ровно', '', x, ty - 20); SFX.land(4); buzz(12); }
     else { floatAt(`+${r.pts}`, '', '', x, ty - 20); SFX.land(2); buzz(10); }
     G.squash = 1;
-    if (r.stitched) setTimeout(() => { if (G) { floatAt(`+${STITCH_BONUS}`, 'сшито — не упадёт!', 'stitch', W / 2, H * .3); SFX.stitch(); G.stitchFlash = 1; } }, 250);
+    if (r.stitched) {
+      const pay = seamPay(G.S.stitches * STITCH_EVERY);
+      setTimeout(() => { if (G) { floatAt(`+${STITCH_BONUS}`, pay ? `сшито! +${pay} ${PG}` : 'сшито — не упадёт!', 'stitch', W / 2, H * .3); SFX.stitch(); G.stitchFlash = 1; } }, 250);
+    }
   }
   bumpScore();
   renderCombo();
@@ -549,7 +569,7 @@ function floatAt(main, sub, cls, x, y) {
 }
 function bumpScore() {
   const el = $('score'); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
-  const r = Wallet.rewardFor(G.S.score), rEl = $('reward');
+  const r = rewardOf(G.S).total, rEl = $('reward');
   if (+rEl.dataset.v !== r) { rEl.dataset.v = r; rEl.innerHTML = `${r} ${PG}`; if (r > 0) { rEl.classList.remove('pulse'); void rEl.offsetWidth; rEl.classList.add('pulse'); } }
 }
 function renderCombo() { $('comboBar').innerHTML = G.S.combo >= 2 ? `Точно подряд: ${G.S.combo} <span class="x">×${multFor(G.S.combo)}</span>` : ''; }
@@ -583,6 +603,7 @@ function draw() {
       ctx.beginPath(); ctx.moveTo(x - 4, y + TH * .2); ctx.lineTo(x + 4, y + TH * 1.1); ctx.stroke();
     }
   }
+  drawRuler();
   // Падающие пуговицы
   G.tumble.forEach(q => {
     ctx.save(); ctx.translate(sx(q.x), q.y - cam); ctx.rotate(q.rot);
@@ -606,6 +627,48 @@ function draw() {
     ctx.fillStyle = '#c3c9d6'; ctx.beginPath(); ctx.ellipse(hx, HAND_Y - 14, 4, 7, 0, 0, Math.PI * 2); ctx.fill();
   }
   if (G.drop) drawDisc(ctx, sx(G.drop.x), G.drop.y - cam, G.drop.w * U, TH, G.drop.c, false);
+}
+
+// Пуговка-валюта на canvas — как значок .pg: алая с четырьмя дырочками
+function drawPg(g, x, y, r) {
+  g.fillStyle = '#E8623E'; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#c74a29'; g.lineWidth = Math.max(1, r * .22); g.beginPath(); g.arc(x, y, r * .62, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#6e2410';
+  [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => { g.beginPath(); g.arc(x + a * r * .26, y + b * r * .26, Math.max(.8, r * .14), 0, Math.PI * 2); g.fill(); });
+}
+// Линейка высоты у правого края: деления на каждой пуговице, отметки швов (каждые STITCH_EVERY)
+// с ценой шва; следующая платная высота подсвечена пунктиром через всё поле.
+function drawRuler() {
+  const S = G.S, cam = G.cam, x = W - 4;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(31,39,66,.16)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); ctx.stroke();
+  const fs = Math.max(11, Math.round(U * .36));
+  ctx.font = `800 ${fs}px Onest, system-ui, sans-serif`; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  let nextPaid = -1;
+  for (let h = (S.stitches + 1) * STITCH_EVERY; h < 400; h += STITCH_EVERY) if (seamPay(h)) { nextPaid = h; break; }
+  for (let h = 1; h < 400; h++) {
+    const y = levelY(h - 1) - cam;
+    if (y < -20) break;
+    if (y > H + 20) continue;
+    const seam = h % STITCH_EVERY === 0;
+    ctx.strokeStyle = 'rgba(31,39,66,.22)';
+    ctx.beginPath(); ctx.moveTo(x - (seam ? 10 : 4), y + .5); ctx.lineTo(x, y + .5); ctx.stroke();
+    if (!seam) continue;
+    const done = h / STITCH_EVERY <= S.stitches, pay = seamPay(h);
+    if (h === nextPaid) {   // пунктир «докуда строить за следующие пуговки»
+      ctx.strokeStyle = 'rgba(232,98,62,.45)'; ctx.setLineDash([5, 6]); ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(4, y + .5); ctx.lineTo(x - 12, y + .5); ctx.stroke(); ctx.setLineDash([]); ctx.lineWidth = 1;
+    }
+    const ty = y - fs * .55;
+    if (done) { ctx.fillStyle = '#2f9a77'; ctx.fillText(pay ? `✓ +${pay}` : '✓', x - 3, ty); }
+    else if (pay) {
+      ctx.fillStyle = h === nextPaid ? '#E8623E' : 'rgba(232,98,62,.75)';
+      ctx.fillText(`+${pay}`, x - fs * 1.05 - 3, ty);
+      drawPg(ctx, x - fs * .5 - 2, ty, fs * .45);
+    } else { ctx.fillStyle = 'rgba(31,39,66,.4)'; ctx.fillText(String(h), x - 3, ty); }
+  }
+  ctx.restore();
 }
 
 let last = 0, raf = 0;
@@ -654,7 +717,8 @@ function startRun(pending = false) {
   $('reward').dataset.v = 0; $('reward').innerHTML = `0 ${PG}`;
   updateTimer(RUN_TIME); renderLives();
   $('comboBar').innerHTML = '';
-  $('gameHint').textContent = 'Касайся экрана — нитка обрежется, пуговица упадёт. Время пойдёт с первого касания';
+  $('gameHint').textContent = 'Касайся экрана — нитка обрежется, пуговица упадёт. '
+    + (Wallet.freeLeft() > 0 ? 'Время пойдёт с первого касания' : `Время пойдёт и вход ${ECON.ENTRY} пуговок спишется с первого касания`);
   last = 0;
   if (!raf) raf = requestAnimationFrame(loop);
   G.pendingPay = pending;
@@ -662,27 +726,24 @@ function startRun(pending = false) {
 }
 function play() {
   if (G && !G.S.over && $('game').classList.contains('active')) return; // двойное нажатие: забег уже идёт, второй раз не списываем
-  const how = Wallet.pay();
-  if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
-  startRun();
-  if (how === 'paid') toast(`−${ECON.ENTRY} ${PG} за вход`, 1600);
+  if (!Wallet.canPlay()) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
+  startRun(true);   // вход (бесплатный или платный) спишется при первом касании — см. onFirstStart
 }
 function endRun(why) {
   if (!G || G.ended) return;
   G.ended = true; G.S.over = true;
   $('score').textContent = G.S.score;
   const S = G.S, sc = S.score;
-  const earned = Wallet.credit(Wallet.rewardFor(sc));
+  const rw = rewardOf(S);
+  const earned = Wallet.credit(rw.total);
   const taskRes = Task.check({ score: sc, stitches: S.stitches, perfects: S.perfects, height: S.best, falls: S.falls, placed: S.placed });
   const isBest = sc > save.best; if (isBest) save.best = sc;
   $('overTitle').textContent = why === 'lives' ? 'Нитки кончились! 🧵' : earned > 0 ? 'Высокая башня! 🎉' : 'Время вышло! ⏱';
   $('overScore').textContent = sc;
   $('overStats').innerHTML = `Пуговиц: <b>${S.placed}</b> · точных: <b>${S.perfects}</b> · сшито: <b>${S.stitches}</b> · высота: <b>${S.best}</b>`
     + (isBest && sc > 0 ? '<br>🏆 Новый рекорд!' : '');
-  $('overTiers').innerHTML = ECON.TIERS.map(t => `<i class="${sc >= t.at ? 'got' : ''}"><b>${t.pay}</b>${t.at}</i>`).join('');
-  const next = ECON.TIERS.find(t => sc < t.at), capHit = earned < Wallet.rewardFor(sc);
-  $('overNext').innerHTML = capHit ? 'Дневной лимит наград исчерпан — приходите завтра'
-    : next ? `До награды ${next.pay} ${PG} не хватило ${next.at - sc} очков` : 'Максимальная награда! 👑';
+  $('overTiers').innerHTML = linesHTML(rw, earned, S.stitches ? `Швы ниже высоты ${ECON.SEAM_PAY[0].from}` : 'Ни одного шва');
+  $('overNext').innerHTML = rw.next + ` ${PG}`;
   const tl = taskLineHTML(taskRes); $('overTask').className = tl.cls; $('overTask').innerHTML = tl.html;
   $('overWallet').textContent = Wallet.balance;
   const again = $('overAgain');
@@ -697,6 +758,15 @@ function endRun(why) {
     let k = 0;
     const id = setInterval(() => { el.textContent = Math.min(++k, earned); if (k >= earned || $('over').style.display !== 'flex') clearInterval(id); else SFX.tick(); }, 70);
   }, 400);
+}
+// Разбивка «за что заплачено» на экране итога
+function linesHTML(rw, earned, empty) {
+  let h = rw.lines.length
+    ? rw.lines.map(l => `<div><span>${l.label}${l.qty > 1 ? ` · ${l.qty} × ${l.each}` : ''}</span><b>${l.sum} ${PG}</b></div>`).join('')
+    : `<div class="none"><span>${empty}</span><b>0 ${PG}</b></div>`;
+  if (rw.lines.length > 1) h += `<div class="tot"><span>Итого</span><b>${rw.total} ${PG}</b></div>`;
+  if (earned < rw.total) h += `<div class="cap">Дневной лимит ${ECON.DAILY_CAP} ${PG}: начислено ${earned} из ${rw.total}</div>`;
+  return h;
 }
 $('btnPlay').onclick = play;
 $('overAgain').onclick = play;
@@ -758,7 +828,11 @@ $('btnHelp').onclick = () => toast(
 
 // ---------- Правила ----------
 function renderRules() {
-  const tiers = ECON.TIERS.map(t => `<tr><td>от ${t.at} очков</td><td>${t.pay} ${PG}</td></tr>`).join('');
+  const first = ECON.SEAM_PAY[0].from;
+  const tiers = `<tr><td>швы на высоте ${STITCH_EVERY}–${first - STITCH_EVERY}</td><td>0</td></tr>`
+    + ECON.SEAM_PAY.map((s, i) => { const nx = ECON.SEAM_PAY[i + 1];
+      return `<tr><td>швы на высоте ${nx ? `${s.from}–${nx.from - STITCH_EVERY}` : `${s.from} и выше`}</td><td>+${s.pay} ${PG} за шов</td></tr>`; }).join('');
+  const ex = rewardOf({ stitches: 8 }).total;
   $('rulesBody').innerHTML = `
     <div class="rcard"><h3>🏗 Как играть</h3><ul>
       <li>${RUN_TIME} секунд и ${LIVES} нитки 🧵. Пуговица качается на нитке — коснись, и она упадёт на вершину башни.</li>
@@ -772,13 +846,19 @@ function renderRules() {
       <li>Одно задание в день, одинаковое для всех, — проверяется по итогам забега: +${TASK_REWARD} ${PG} (в пределах дневного лимита).</li></ul></div>
     <div class="rcard"><h3>🎟 Вход</h3><ul>
       <li><b>${ECON.FREE_PER_DAY} бесплатный забег в день</b>, дальше — ${ECON.ENTRY} ${PG}.</li>
+      <li>Вход списывается при первом касании. Вышел в меню раньше — ничего не списано.</li>
       <li>Играешь ${ECON.STREAK_DAYS} дня подряд и дольше — каждый день +1 бесплатный забег.</li></ul></div>
-    <div class="rcard"><h3>🏆 Награда — по порогам очков</h3><table>${tiers}</table>
-      <ul><li>За сутки — не больше <b>${ECON.DAILY_CAP} ${PG}</b>. Новый день — в полночь по вашему времени.</li></ul></div>
+    <div class="rcard"><h3>🏆 Награда — за высоту</h3>
+      <ul><li>Пуговки платятся за <b>швы</b>: каждые ${STITCH_EVERY} устоявших пуговиц сшиваются, и шов платит по своей высоте — чем выше, тем дороже.</li></ul>
+      <table>${tiers}</table>
+      <ul><li>Например, 8 швов (высота ${8 * STITCH_EVERY}) = <b>${ex} ${PG}</b>. Шов уже не упадёт — заработанное не сгорит.</li>
+      <li>Справа на поле — линейка: отметки швов и их цена, пунктир — следующая платная высота.</li>
+      <li>Очки и точные укладки — для рекорда, на награду не влияют.</li>
+      <li>За сутки — не больше <b>${ECON.DAILY_CAP} ${PG}</b>. Новый день — в полночь по вашему времени.</li></ul></div>
     <div class="rcard"><h3>🧺 Основания</h3><ul>
       <li>Игольница, напёрсток, шкатулка, книга — ${ECON.BASE_PRICE} ${PG}. Только внешний вид: ширина у всех одинаковая.</li></ul></div>
     <div class="rcard honest"><h3>🤝 Честно</h3><ul>
-      <li>Награда зависит <b>только от очков</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
+      <li>Награда зависит <b>только от высоты сшитой башни</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
       <li>Набор пуговиц один на всех — ни у кого нет «удачного» расклада.</li>
       <li>Все цены и пороги — на этом экране, во время игры они не меняются.</li></ul></div>`;
 }
@@ -836,11 +916,18 @@ function taskLineHTML(r) {
 }
 
 // ---------- Первый запуск: сразу в игру, рука показывает, что делать ----------
-// Бесплатная попытка списывается только при первом касании — открыл и ушёл в меню, попытка цела.
+// Вход (бесплатная попытка или 10 пуговок) списывается только при первом касании — открыл и ушёл в меню, ничего не списано.
+// Возвращает false, если платить нечем (забег не начинается).
 function onFirstStart() {
   hideHand();
   localStorage.setItem(KEY('hand'), '1');
-  if (G && G.pendingPay) { G.pendingPay = false; Wallet.pay(); }
+  if (G && G.pendingPay) {
+    G.pendingPay = false;               // флаг снимаем до списания — второй раз не спишется
+    const how = Wallet.pay();
+    if (!how) { G.S.over = true; G.ended = true; G = null; show('menu'); toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}`); return false; }
+    if (how === 'paid') toast(`−${ECON.ENTRY} ${PG} за вход`, 1600);
+  }
+  return true;
 }
 function handPath() {
   const r = cv.getBoundingClientRect();

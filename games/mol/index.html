@@ -123,11 +123,12 @@
   .res .sub{font-size:14px;opacity:.7;text-align:center}
   .earn{display:flex;align-items:center;gap:10px;font-size:46px;font-weight:900;color:var(--graphic)}
   .earn .pg{width:44px;height:44px}
-  .tiers{display:flex;gap:4px;margin-top:4px}
-  .tiers i{display:flex;flex-direction:column;align-items:center;font-style:normal;font-size:11px;opacity:.5;
-    background:var(--accent-bg);border-radius:8px;padding:4px 6px;min-width:44px}
-  .tiers i b{font-size:14px}
-  .tiers i.got{opacity:1;background:var(--accent-text);color:#fff}
+  .lines{width:100%;max-width:300px;font-size:14px;margin-top:2px}
+  .lines div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:3px 0;border-bottom:1px dashed rgba(31,39,66,.14)}
+  .lines div b{font-variant-numeric:tabular-nums;white-space:nowrap;display:flex;align-items:center;gap:4px}
+  .lines div.tot{border-bottom:0;font-weight:800}
+  .lines div.zero{opacity:.55}
+  .capLine{font-size:14px;font-weight:700;color:var(--graphic);text-align:center}
   .nextTier{font-size:14px;opacity:.75;text-align:center}
   .walletLine{font-size:15px;opacity:.85;display:flex;align-items:center;gap:6px}
   .row{display:flex;gap:12px}
@@ -218,7 +219,7 @@
   <header>
     <div class="stat"><span>Счёт</span><b id="score">0</b></div>
     <div class="stat"><span>Время</span><b id="timer">1:15</b></div>
-    <div class="stat"><span>Награда</span><b id="reward">0 <span class="pg"></span></b></div>
+    <div class="stat"><span>Пуговки</span><b id="reward">+0 <span class="pg"></span></b></div>
   </header>
   <div class="comboBar"><span class="btnLeft" id="btnLeft"></span><span id="comboBar"></span></div>
   <div id="stage"><canvas id="cv"></canvas></div>
@@ -241,7 +242,8 @@
     <p>Счёт: <b id="overScore">0</b></p>
     <div class="sub" id="overStats"></div>
     <div class="earn">+<span id="overEarn">0</span><span class="pg"></span></div>
-    <div class="tiers" id="overTiers"></div>
+    <div class="lines" id="overLines"></div>
+    <div class="capLine" id="overCap"></div>
     <div class="nextTier" id="overNext"></div>
     <div class="taskLine" id="overTask"></div>
   </div>
@@ -263,17 +265,14 @@ const KEY = k => 'pmo-' + k; // у каждой игры своё демо-хр�
 const ECON = {
   START_WALLET: 100,   // демо-баланс
   FREE_PER_DAY: 1,     // бесплатных забегов в день
-  ENTRY: 10,           // платный забег
-  // Награда по порогам очков — только умение, без случайности.
-  // Пороги подобраны симуляцией (400 забегов на тип игрока, 30 разных дней):
-  // медиана новичок ~1000, средний ~1890, хороший ~3650, сильный ~6350 → ≈4.9 пуговки за вход.
-  TIERS: [
-    { at: 800, pay: 2 },
-    { at: 1800, pay: 5 },
-    { at: 3200, pay: 8 },
-    { at: 4800, pay: 12 },
-    { at: 6800, pay: 16 },
-  ],
+  ENTRY: 10,           // платный забег (списывается при первом касании)
+  // Награда «твои — те, что сберёг», без случайности. Считается в конце забега:
+  //   целые пуговки на полках: каждые SAVE_PER → 1; все 9 целы → ещё ALL_BONUS;
+  //   моль: каждая пойманная даёт множитель серии (×1…×5), каждые MOTH_PER → 1.
+  // Подобрано симуляцией (400 забегов на тип игрока, 30 дней): 1,1 / 4,2 / 9,0 / 11,3 → ≈4,9 за вход.
+  SAVE_PER: 2,
+  ALL_BONUS: 2,
+  MOTH_PER: 60,
   DAILY_CAP: 60,       // больше этого за сутки не начисляем
   STREAK_DAYS: 3,      // играешь N дней подряд — +1 бесплатный забег в день
   SKIN_PRICE: 10,      // шкаф другого цвета — только внешний вид
@@ -309,7 +308,25 @@ function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = 
 function hashStr(s) { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
 const lerp = (a, b, k) => a + (b - a) * k;
 const mult = c => Math.min(5, 1 + Math.floor(c / 6));   // каждые 6 точных подряд +1, до ×5
-function rewardFor(score) { let p = 0; for (const t of ECON.TIERS) if (score >= t.at) p = t.pay; return p; }
+// Награда за забег — одна функция для экрана итога, счётчика в забеге и симуляции.
+// alive можно передать, чтобы посчитать «а если бы»; по умолчанию — сколько пуговок цело сейчас.
+function rewardOf(S, alive = S.buttons.filter(b => b.alive).length) {
+  const n = S.buttons.length, sp = ECON.SAVE_PER, mp = ECON.MOTH_PER;
+  const save = Math.floor(alive / sp), all = alive === n ? ECON.ALL_BONUS : 0, moth = Math.floor(S.mothW / mp);
+  const total = save + all + moth;
+  const lines = [
+    { label: `Сбережено пуговок ${alive}/${n}`, qty: alive, each: 1 / sp, sum: save, txt: `${alive} : ${sp} = ${save}` },
+    { label: `Все ${n} целы`, qty: alive === n ? 1 : 0, each: ECON.ALL_BONUS, sum: all, txt: `+${all}` },
+    { label: `Моль ${S.caught} шт. × серия`, qty: S.mothW, each: 1 / mp, sum: moth, txt: `${S.mothW} : ${mp} = ${moth}` },
+  ];
+  let hint;
+  if (alive < n) {
+    const k = alive + 1 < n && Math.floor((alive + 1) / sp) === save ? 2 : 1;
+    const d = Math.floor((alive + k) / sp) + (alive + k === n ? ECON.ALL_BONUS : 0) - save - all;
+    hint = `Сбереги ещё ${k} ${k === 1 ? 'пуговку' : 'пуговки'} — и было бы +${d}`;
+  } else hint = `Ещё ${mp - S.mothW % mp} моли × серию — +1. Серия ×5 копит впятеро быстрее`;
+  return { total, lines, hint, alive };
+}
 
 // Расписание дня: когда, какая моль и из какой складки — от генератора с датой (одинаково для всех)
 function makeSchedule(rnd) {
@@ -330,7 +347,7 @@ function newState(seed) {
   const rnd = mulberry32(seed);
   const S = {
     rnd, t: 0, score: 0, combo: 0, bestCombo: 0, caught: 0, eaten: 0, btnHits: 0, misses: 0,
-    saved: 0, pockets: 0, flocksFull: 0, bonus: 0, over: false,
+    saved: 0, pockets: 0, flocksFull: 0, bonus: 0, over: false, mothW: 0,   // mothW — моль × множитель серии
     buttons: BUTTON_SPOTS.map((p, i) => ({ i, x: p.x, y: p.y, alive: true })),
     moths: [], ev: makeSchedule(rnd), evI: 0, id: 1, regrowT: 0, flocks: {}, log: [],
   };
@@ -432,7 +449,7 @@ function tapAt(S, x, y) {
     const m = best, T = MOTHS[m.type], k = mult(S.combo);
     S.combo++; S.bestCombo = Math.max(S.bestCombo, S.combo);
     if (--m.hp > 0) { const pts = 5 * k; S.score += pts; S.log.push({ k: 'hit2', x: m.x, y: m.y, pts }); return 'hit2'; }
-    m.dead = true; S.moths = S.moths.filter(o => o !== m); S.caught++;
+    m.dead = true; S.moths = S.moths.filter(o => o !== m); S.caught++; S.mothW += k;
     let pts = T.pts * k; const extra = [];
     if (m.phase === 'out') { pts += POCKET_BONUS * k; S.pockets++; extra.push('из складки!'); }
     if (m.phase === 'eat') { S.saved++; extra.push('пуговка спасена'); }
@@ -492,7 +509,6 @@ const Wallet = {
     if (how) Streak.touch();
     return how;
   },
-  rewardFor,
   credit(n) {
     const d = this.day(); const got = Math.max(0, Math.min(n, ECON.DAILY_CAP - d.earned));
     d.earned += got; this.saveDay(d); this.balance += got; return got;
@@ -722,7 +738,7 @@ function tapScreen(clientX, clientY) {
   if (!G || G.over) return;
   const r = cv.getBoundingClientRect();
   const x = (clientX - r.left - OX) / FW, y = (clientY - r.top - OY) / FW;
-  if (!G.started) { G.started = true; onFirstStart(); $('gameHint').textContent = ''; }
+  if (!G.started) { G.started = true; onFirstStart(); if (!G) return; $('gameHint').textContent = ''; }
   G.rings.push({ x, y, t: 0 });
   tapAt(G.S, x, y);
   drainLog();
@@ -767,12 +783,14 @@ function drainLog() {
 
 function onScore() {
   const el = $('score'); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
-  const r = Wallet.rewardFor(G.S.score), rEl = $('reward');
+  updateReward();
+}
+// Счётчик в забеге: сколько пуговок дали бы, если бы забег кончился сейчас (съели пуговку — число падает)
+function updateReward() {
+  const r = rewardOf(G.S).total, rEl = $('reward');
   if (+rEl.dataset.v !== r) {
-    const up = r > +rEl.dataset.v;
-    rEl.dataset.v = r; rEl.innerHTML = `${r} ${PG}`;
-    if (r > 0 && up) { rEl.classList.remove('pulse'); void rEl.offsetWidth; rEl.classList.add('pulse');
-      setTimeout(() => { if (G && !G.over) floatAt(`Награда ${r}`, 'новый порог!', 'good', W / 2, 40); }, 450); }
+    rEl.dataset.v = r; rEl.innerHTML = `+${r} ${PG}`;
+    rEl.classList.remove('pulse'); void rEl.offsetWidth; rEl.classList.add('pulse');
   }
 }
 function renderButtonsLeft() {
@@ -780,6 +798,7 @@ function renderButtonsLeft() {
   el.innerHTML = `${PG} ${n}/${BUTTON_SPOTS.length}`;
   el.classList.toggle('low', n <= 4);
   if (n !== G.lastAlive) { G.lastAlive = n; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+  updateReward();
 }
 function renderCombo(up) {
   const c = G.S.combo, m = mult(c);
@@ -917,7 +936,7 @@ function startRun(pending = false) {
   show('game');
   resize();
   $('score').textContent = '0';
-  $('reward').dataset.v = 0; $('reward').innerHTML = `0 ${PG}`;
+  $('reward').dataset.v = -1;
   updateTimer(RUN_TIME); G.lastTick = RUN_TIME;
   $('comboBar').innerHTML = '';
   renderButtonsLeft();
@@ -928,30 +947,33 @@ function startRun(pending = false) {
   setTimeout(maybeHand, 500);
 }
 
+// Вход списывается при первом касании забега (onFirstStart), а не по кнопке:
+// вышел в меню до касания — ничего не списано.
 function play() {
-  const how = Wallet.pay();
-  if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
-  startRun();
-  if (how === 'paid') toast(`−${ECON.ENTRY} ${PG} за вход`, 1600);
+  if (G && !G.over && $('game').classList.contains('active')) return; // двойное нажатие: забег уже открыт
+  if (!Wallet.canPlay()) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
+  startRun(true);
 }
 
 function endRun() {
+  if (!G || G.over) return;
   G.over = true;
-  const S = G.S, sc = S.score, alive = S.buttons.filter(b => b.alive).length;
+  const S = G.S, sc = S.score, alive = S.buttons.filter(b => b.alive).length, rw = rewardOf(S);
   $('score').textContent = G.shown = sc;
-  const earned = Wallet.credit(Wallet.rewardFor(sc));
+  const earned = Wallet.credit(rw.total);
   const taskRes = Task.check({ score: sc, caught: S.caught, alive, bestCombo: S.bestCombo, flocks: S.flocksFull, saved: S.saved });
   const isBest = sc > save.best;
   if (isBest) save.best = sc;
-  $('overTitle').textContent = earned > 0 ? 'Шкаф спасён! 🎉' : 'Время вышло! ⏱';
+  $('overTitle').textContent = alive === BUTTON_SPOTS.length ? 'Шкаф спасён! 🎉' : earned > 0 ? 'Время вышло! ⏱' : 'Моль победила… ⏱';
   $('overScore').textContent = sc;
   $('overStats').innerHTML = `Поймано моли: <b>${S.caught}</b> · лучшая серия: <b>${S.bestCombo}</b><br>`
     + `Пуговок цело: <b>${alive}/${BUTTON_SPOTS.length}</b> (+${S.bonus}) · съедено: <b>${S.eaten}</b>`
     + (isBest && sc > 0 ? '<br>🏆 Новый рекорд!' : '');
-  $('overTiers').innerHTML = ECON.TIERS.map(t => `<i class="${sc >= t.at ? 'got' : ''}"><b>${t.pay}</b>${t.at}</i>`).join('');
-  const next = ECON.TIERS.find(t => sc < t.at), capHit = earned < Wallet.rewardFor(sc);
-  $('overNext').innerHTML = capHit ? 'Дневной лимит наград исчерпан — приходите завтра'
-    : next ? `До награды ${next.pay} ${PG} не хватило ${next.at - sc} очков` : 'Максимальная награда! 👑';
+  $('overLines').innerHTML = rw.lines.map(l => `<div class="${l.sum ? '' : 'zero'}"><span>${l.label}</span><b>${l.txt} ${PG}</b></div>`).join('')
+    + `<div class="tot"><span>Итого</span><b>${rw.total} ${PG}</b></div>`;
+  const capHit = earned < rw.total;
+  $('overCap').innerHTML = capHit ? `Дневной лимит ${ECON.DAILY_CAP} ${PG} — начислено ${earned} из ${rw.total}, сверх лимита не начисляется` : '';
+  $('overNext').innerHTML = '💡 ' + rw.hint;
   const tl = taskLineHTML(taskRes); $('overTask').className = tl.cls; $('overTask').innerHTML = tl.html;
   $('overWallet').textContent = Wallet.balance;
   const again = $('overAgain');
@@ -1013,11 +1035,10 @@ function skinTap(id, btn) {
 
 $('btnHelp').onclick = () => toast(
   '👋 Из складок одежды вылезает моль и летит к пуговкам.<br>Тапай по моли, пока она не <b>съела пуговку</b> (−30).<br>'
-  + 'Пуговку не задевай — −15. Точные тапы подряд — множитель до ×5.<br>Целые пуговки в конце — по +15!', 7000);
+  + 'Пуговку не задевай — −15. Точные тапы подряд — множитель до ×5.<br>Целые пуговки в конце — по +15 очков и пуговки на счёт:<br>каждые ' + ECON.SAVE_PER + ' целые — 1 ' + PG + ', все 9 — ещё +' + ECON.ALL_BONUS + '.', 8000);
 
 // ---------- Правила ----------
 function renderRules() {
-  const tiers = ECON.TIERS.map(t => `<tr><td>от ${t.at} очков</td><td>${t.pay} ${PG}</td></tr>`).join('');
   $('rulesBody').innerHTML = `
     <div class="rcard"><h3>👋 Как играть</h3><ul>
       <li>Забег — ${RUN_TIME} секунд. Время пойдёт с первого касания.</li>
@@ -1039,15 +1060,22 @@ function renderRules() {
       <li>Одно задание в день, одинаковое для всех, — проверяется по итогам забега: +${TASK_REWARD} ${PG} (в пределах дневного лимита).</li></ul></div>
     <div class="rcard"><h3>🎟 Вход</h3><ul>
       <li><b>${ECON.FREE_PER_DAY} бесплатный забег в день</b>, дальше — ${ECON.ENTRY} ${PG}.</li>
+      <li>Вход списывается при первом касании забега. Открыл и вышел в меню — ничего не списано.</li>
       <li>Играешь ${ECON.STREAK_DAYS} дня подряд и дольше — каждый день +1 бесплатный забег.</li></ul></div>
-    <div class="rcard"><h3>🏆 Награда — по порогам очков</h3><table>${tiers}</table>
-      <ul><li>За сутки — не больше <b>${ECON.DAILY_CAP} ${PG}</b>. Новый день — в полночь по вашему времени.</li></ul></div>
+    <div class="rcard"><h3>🏆 Награда — твои те, что сберёг</h3><table>
+      <tr><td>Каждые ${ECON.SAVE_PER} целые пуговки на полках в конце</td><td>1 ${PG}</td></tr>
+      <tr><td>Все ${BUTTON_SPOTS.length} пуговок целы</td><td>+${ECON.ALL_BONUS} ${PG}</td></tr>
+      <tr><td>Моль: каждая пойманная даёт свой множитель серии (×1…×5), каждые ${ECON.MOTH_PER}</td><td>1 ${PG}</td></tr></table>
+      <ul><li>Пример: 9 целых и 120 моли в серии ×2 → ${Math.floor(9 / ECON.SAVE_PER)} + ${ECON.ALL_BONUS} + ${Math.floor(240 / ECON.MOTH_PER)} = ${Math.floor(9 / ECON.SAVE_PER) + ECON.ALL_BONUS + Math.floor(240 / ECON.MOTH_PER)} ${PG}.</li>
+      <li>В забеге наверху видно, сколько пуговок получишь, если забег кончится сейчас: съели пуговку — число падает.</li>
+      <li>Очки — для рекорда и заданий, на награду не влияют.</li>
+      <li>За сутки — не больше <b>${ECON.DAILY_CAP} ${PG}</b>. Новый день — в полночь по вашему времени.</li></ul></div>
     <div class="rcard"><h3>🚪 Шкафы</h3><ul>
       <li>Шкаф другого цвета — ${ECON.SKIN_PRICE} ${PG}. Только внешний вид, на очки не влияет.</li></ul></div>
     <div class="rcard honest"><h3>🤝 Честно</h3><ul>
-      <li>Награда зависит <b>только от очков</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
+      <li>Награда зависит <b>только от сбережённых пуговок и пойманной моли</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
       <li>Поле одинаковое на любом экране, свернули вкладку — время стоит.</li>
-      <li>Все цены и пороги — на этом экране, во время игры они не меняются.</li></ul></div>`;
+      <li>Все цены и курс — на этом экране, во время игры они не меняются.</li></ul></div>`;
 }
 $('btnRules').onclick = () => { renderRules(); show('rules'); };
 $('rulesBack').onclick = () => show('menu');
@@ -1109,7 +1137,12 @@ function taskLineHTML(r) {
 function onFirstStart() {
   hideHand();
   localStorage.setItem(KEY('hand'), '1');
-  if (G && G.pendingPay) { G.pendingPay = false; Wallet.pay(); }
+  if (G && G.pendingPay) {
+    G.pendingPay = false;   // флаг снимается до списания — второй раз не спишем
+    const how = Wallet.pay();
+    if (how === 'paid') toast(`−${ECON.ENTRY} ${PG} за вход`, 1600);
+    else if (!how) { G.over = true; G = null; show('menu'); toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}`); }
+  }
 }
 function handPath() {
   const r = cv.getBoundingClientRect(), m = G.S.moths[0];

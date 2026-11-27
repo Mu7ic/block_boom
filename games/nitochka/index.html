@@ -116,7 +116,7 @@
 
   /* ---------- Итог ---------- */
   .overlay{position:fixed;inset:0;background:rgba(255,253,247,.95);display:none;flex-direction:column;align-items:center;
-    justify-content:center;gap:12px;z-index:20;padding:20px;animation:fadeIn .3s}
+    justify-content:safe center;gap:12px;z-index:20;padding:20px;animation:fadeIn .3s;overflow-y:auto;touch-action:pan-y}
   @keyframes fadeIn{from{opacity:0}}
   .overlay h2{margin:0;font-size:32px;text-align:center}
   .res{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--el-bg);border-radius:20px;
@@ -125,11 +125,14 @@
   .res .sub{font-size:14px;opacity:.7;text-align:center}
   .earn{display:flex;align-items:center;gap:10px;font-size:46px;font-weight:900;color:var(--graphic)}
   .earn .pg{width:44px;height:44px}
-  .tiers{display:flex;gap:4px;margin-top:4px}
-  .tiers i{display:flex;flex-direction:column;align-items:center;font-style:normal;font-size:11px;opacity:.5;
-    background:var(--accent-bg);border-radius:8px;padding:4px 6px;min-width:44px}
-  .tiers i b{font-size:14px}
-  .tiers i.got{opacity:1;background:var(--accent-text);color:#fff}
+  /* Разбивка награды: за что заплачено */
+  .lines{width:100%;display:flex;flex-direction:column;gap:3px;margin-top:2px}
+  .lines .ln{display:flex;align-items:center;gap:8px;font-size:14px;line-height:1.25;background:var(--page);border-radius:10px;padding:6px 10px}
+  .lines .ln span{flex:1}
+  .lines .ln small{opacity:.6;font-size:12px}
+  .lines .ln b{display:flex;align-items:center;gap:3px;flex:none;font-size:16px}
+  .lines .ln.cap{background:none;padding:2px 10px;color:var(--graphic);font-weight:700;font-size:13px}
+  .lines .ln.none{background:none;justify-content:center;opacity:.7}
   .nextTier{font-size:14px;opacity:.75;text-align:center}
   .walletLine{font-size:15px;opacity:.85;display:flex;align-items:center;gap:6px}
   .row{display:flex;gap:12px}
@@ -214,7 +217,7 @@
   <header>
     <div class="stat"><span>Счёт</span><b id="score">0</b></div>
     <div class="stat"><span>Время</span><b id="timer">1:30</b></div>
-    <div class="stat"><span>Награда</span><b id="reward">0 <span class="pg"></span></b></div>
+    <div class="stat"><span>Заработано</span><b id="reward">+0 <span class="pg"></span></b></div>
   </header>
   <div class="infoBar">
     <span id="pzInfo">Вышивка 1</span>
@@ -244,7 +247,7 @@
     <p>Счёт: <b id="overScore">0</b></p>
     <div class="sub" id="overStats"></div>
     <div class="earn">+<span id="overEarn">0</span><span class="pg"></span></div>
-    <div class="tiers" id="overTiers"></div>
+    <div class="lines" id="overLines"></div>
     <div class="nextTier" id="overNext"></div>
     <div class="taskLine" id="overTask"></div>
   </div>
@@ -261,28 +264,22 @@ const $ = id => document.getElementById(id);
 const PG = '<span class="pg"></span>';
 const KEY = k => 'pnt-' + k; // у каждой игры своё демо-хранилище
 
+// <logic> ---------- Чистая логика без DOM (её же запускает симуляция баланса) ----------
 // ---------- Экономика: все числа в одном месте (их же — в записке) ----------
 const ECON = {
   START_WALLET: 100,   // демо-баланс
   FREE_PER_DAY: 1,     // бесплатных забегов в день
   ENTRY: 10,           // платный забег
-  // Награда по порогам очков — только умение, без случайности.
-  // Пороги подобраны симуляцией (реальный генератор и подсчёт очков, 4 типа игроков, по 400 забегов):
-  // медиана новичок ~330, средний ~460, хороший ~780, сильный ~1220; выплата за вход ≈ 4,8.
-  TIERS: [
-    { at: 260, pay: 2 },
-    { at: 450, pay: 5 },
-    { at: 750, pay: 8 },
-    { at: 1000, pay: 12 },
-    { at: 1250, pay: 16 },
-  ],
+  // Награда — за решённые вышивки, по размеру; всё поле зашито — ещё +FILL_BONUS.
+  // Пропущенная и недошитая вышивки не оплачиваются. Подобрано симуляцией (см. записку).
+  PAY_SIZE: { 4: 0, 5: 1, 6: 2, 7: 3, 8: 4 },   // 4×4 — разминка: платит только «всё поле»
+  FILL_BONUS: 1,
   DAILY_CAP: 60,       // больше этого за сутки не начисляем
   STREAK_DAYS: 3,      // играешь N дней подряд — +1 бесплатный забег в день
   STITCH_PRICE: 10,    // вид стежка — только внешний вид
 };
 const RUN_TIME = 90;      // секунд
 
-// <logic> ---------- Чистая логика без DOM (её же запускает симуляция баланса) ----------
 function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function hashStr(s) { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
 
@@ -387,6 +384,23 @@ function makePuzzle(seed, idx) {
   const pairs = res.segs.map((s, k) => ({ a: s[0], b: s[s.length - 1], sol: s, col: cols[k] }));
   return { n, idx, cross: res.cross, pairs };
 }
+// Награда за забег — одна функция для игры, итога и симуляции.
+// done: решённые вышивки [{ n, filled }] → { total, lines: [{ label, qty, each, sum }] }
+function rewardOf(done) {
+  const lines = [];
+  for (const n of [4, 5, 6, 7, 8]) {
+    const q = done.filter(d => d.n === n).length;
+    if (q) lines.push({ label: `Вышивка ${n}×${n}${ECON.PAY_SIZE[n] ? '' : ' (разминка)'}`, qty: q, each: ECON.PAY_SIZE[n], sum: q * ECON.PAY_SIZE[n] });
+  }
+  const f = done.filter(d => d.filled).length;
+  if (f) lines.push({ label: 'Всё поле зашито', qty: f, each: ECON.FILL_BONUS, sum: f * ECON.FILL_BONUS });
+  return { total: lines.reduce((a, l) => a + l.sum, 0), lines };
+}
+const payOf = n => ECON.PAY_SIZE[Math.min(8, Math.max(4, n))];
+// Набор вышивок: первая попытка дня — общий «набор дня» (одинаков для всех),
+// каждая следующая — новый набор (дата + номер попытки), чтобы решения нельзя было выучить.
+// Размеры и число переходов зависят только от номера вышивки — сложность наборов одинаковая.
+const setSeed = (date, attempt) => hashStr('pnt-' + date + (attempt ? '#' + attempt : ''));
 // </logic>
 
 // ---------- День, серия, кошелёк ----------
@@ -420,11 +434,15 @@ const Wallet = {
     if (how) Streak.touch();
     return how;
   },
-  rewardFor(score) { let p = 0; for (const t of ECON.TIERS) if (score >= t.at) p = t.pay; return p; },
   credit(n) {
     const d = this.day(); const got = Math.max(0, Math.min(n, ECON.DAILY_CAP - d.earned));
     d.earned += got; this.saveDay(d); this.balance += got; return got;
   },
+};
+// Номер попытки дня (ключ pnt-tries): 0 — первая (общий набор дня), дальше — новый набор на каждую попытку
+const Tries = {
+  get n() { const t = readJSON('tries', null); return t && t.date === dateKey() ? t.n : 0; },
+  inc() { writeJSON('tries', { date: dateKey(), n: this.n + 1 }); },
 };
 const save = {
   get best() { return +localStorage.getItem(KEY('best')) || 0; },
@@ -671,8 +689,9 @@ addEventListener('resize', () => { resize(); });
 const center = c => [OX + (c % G.pz.n + .5) * CS, OY + ((c / G.pz.n | 0) + .5) * CS];
 
 function newRun() {
+  const attempt = Tries.n;
   G = {
-    seed: hashStr('pnt-' + dateKey()), idx: 0, pz: null,
+    attempt, seed: setSeed(dateKey(), attempt), idx: 0, pz: null, done: [],
     score: 0, shown: 0, solved: 0, filledN: 0, skipped: 0, maxN: 0,
     t: 0, timeLeft: RUN_TIME, started: false, over: false, lastTick: 0, pzT: 0, trans: 0,
     parts: [], drag: null, crossHintShown: false,
@@ -777,7 +796,9 @@ function solved() {
   for (let c = 0; c < P.n * P.n; c++) if (!G.crossSet.has(c) && occ.o[c] < 0) { filled = false; break; }
   const s = scoreSolved(P.n, G.pzT, filled);
   G.solved++; if (filled) G.filledN++; G.maxN = Math.max(G.maxN, P.n);
+  G.done.push({ n: P.n, filled });
   addScore(s.total);
+  updateReward();
   const cy = OY + P.n * CS / 2;
   floatAt(`+${s.total}`, filled ? 'всё поле вышито! ×1,5' : s.spool ? `катушка +${s.spool}` : 'вышито!', filled ? 'perfect' : 'good', W / 2, cy);
   (filled ? SFX.full : SFX.done)(); buzz(filled ? [20, 40, 20, 40, 80] : [20, 40, 60]);
@@ -795,9 +816,12 @@ function nextPuzzle() {
 function addScore(v) {
   G.score += v;
   const el = $('score'); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
-  const r = Wallet.rewardFor(G.score), rEl = $('reward');
+}
+// Счётчик пуговок за забег — только за решённые вышивки
+function updateReward() {
+  const r = rewardOf(G.done).total, rEl = $('reward');
   if (+rEl.dataset.v !== r) {
-    rEl.dataset.v = r; rEl.innerHTML = `${r} ${PG}`;
+    rEl.dataset.v = r; rEl.innerHTML = `+${r} ${PG}`;
     if (r > 0) { rEl.classList.remove('pulse'); void rEl.offsetWidth; rEl.classList.add('pulse'); }
   }
 }
@@ -944,7 +968,7 @@ function startRun(pending = false) {
   show('game');
   resize(); layout();
   $('score').textContent = '0';
-  $('reward').dataset.v = 0; $('reward').innerHTML = `0 ${PG}`;
+  $('reward').dataset.v = 0; $('reward').innerHTML = `+0 ${PG}`;
   updateTimer(RUN_TIME); G.lastTick = RUN_TIME;
   $('gameHint').textContent = 'Веди нитку от пуговки к такой же. Нитки не пересекаются';
   last = 0;
@@ -954,10 +978,10 @@ function startRun(pending = false) {
 }
 
 function play() {
-  const how = Wallet.pay();
-  if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
-  startRun();
-  if (how === 'paid') toast(`−${ECON.ENTRY} ${PG} за вход`, 1600);
+  if (G && !G.over && $('game').classList.contains('active')) return; // двойное нажатие: забег уже идёт, второй раз не списываем
+  if (!Wallet.canPlay()) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
+  // Вход (бесплатный или платный) списывается при первом касании — вышел в меню до него, ничего не потрачено
+  startRun(true);
 }
 
 function endRun() {
@@ -967,27 +991,36 @@ function endRun() {
   if (G.trans <= 0) partial = G.paths.filter((_, j) => isDone(j)).length * PARTIAL_PTS;
   if (partial) G.score += partial;
   const sc = G.score;
-  const earned = Wallet.credit(Wallet.rewardFor(sc));
+  const rw = rewardOf(G.done);
+  const earned = Wallet.credit(rw.total);
   const taskRes = Task.check({ score: sc, solved: G.solved, filled: G.filledN, maxN: G.maxN, skipped: G.skipped });
   const isBest = sc > save.best;
   if (isBest) save.best = sc;
   $('overTitle').textContent = earned > 0 ? 'Красиво вышито! 🎉' : 'Время вышло! ⏱';
   $('overScore').textContent = sc;
   $('overStats').innerHTML = `Вышивок: <b>${G.solved}</b> · всё поле: <b>${G.filledN}</b>` + (G.maxN ? ` · самая большая: <b>${G.maxN}×${G.maxN}</b>` : '')
-    + (partial ? `<br>недошитая вышивка: +${partial}` : '')
+    + (partial ? `<br>недошитая вышивка: +${partial} очков (пуговки — только за готовые)` : '')
     + (isBest && sc > 0 ? '<br>🏆 Новый рекорд!' : '');
-  $('overTiers').innerHTML = ECON.TIERS.map(t => `<i class="${sc >= t.at ? 'got' : ''}"><b>${t.pay}</b>${t.at}</i>`).join('');
-  const next = ECON.TIERS.find(t => sc < t.at), capHit = earned < Wallet.rewardFor(sc);
-  $('overNext').innerHTML = capHit ? 'Дневной лимит наград исчерпан — приходите завтра'
-    : next ? `До награды ${next.pay} ${PG} не хватило ${next.at - sc} очков` : 'Максимальная награда! 👑';
+  const capHit = earned < rw.total;
+  $('overLines').innerHTML = (rw.lines.length
+    ? rw.lines.map(l => `<div class="ln"><span>${l.label} <small>${l.qty} × ${l.each}</small></span><b>${l.sum ? '+' + l.sum : '0'} ${PG}</b></div>`).join('')
+    : `<div class="ln none"><span>Ни одной вышивки не закончено</span></div>`)
+    + (capHit ? `<div class="ln cap"><span>Дневной лимит ${ECON.DAILY_CAP} ${PG}: начислено ${earned} из ${rw.total}</span></div>` : '');
+  // Одна подсказка, как получить больше
+  const nextN = G.pz ? G.pz.n : 8, nextPay = payOf(nextN) + ECON.FILL_BONUS;
+  const notFilled = G.done.filter(d => !d.filled).length;
+  $('overNext').innerHTML = notFilled
+    ? `Зашивай всё поле — было бы ещё +${notFilled * ECON.FILL_BONUS} ${PG}`
+    : `Ещё одна вышивка ${nextN}×${nextN} целиком — +${nextPay} ${PG}`;
   const tl = taskLineHTML(taskRes); $('overTask').className = tl.cls; $('overTask').innerHTML = tl.html;
   $('overWallet').textContent = Wallet.balance;
   const again = $('overAgain');
   again.disabled = !Wallet.canPlay();
   again.innerHTML = Wallet.freeLeft() > 0 ? 'Ещё раз · бесплатно' : Wallet.canPlay() ? `Ещё раз · ${ECON.ENTRY} ${PG}` : 'Не хватает пуговок';
   const el = $('overEarn'); el.textContent = '0';
+  const runG = G; // итог показываем только для этого забега (игрок мог уйти и начать новый)
   setTimeout(() => {
-    if (!$('game').classList.contains('active')) return;
+    if (G !== runG || !$('game').classList.contains('active')) return;
     $('over').style.display = 'flex';
     if (earned > 0) { SFX.win(); buzz([40, 60, 40, 60, 120]); } else SFX.end();
     let k = 0;
@@ -1004,7 +1037,7 @@ $('btnBack').onclick = () => { if (G) G.over = true; G = null; show('menu'); };
 function renderMenu() {
   $('walletNum').textContent = Wallet.balance;
   const best = save.best;
-  $('playSub').innerHTML = `90 секунд · награда в пуговках${best ? ` · рекорд ${best}` : ''}<br>`
+  $('playSub').innerHTML = `${RUN_TIME} секунд · ${Tries.n ? 'новый набор вышивок' : 'набор дня'}${best ? ` · рекорд ${best}` : ''}<br>`
     + (Wallet.freeLeft() > 0 ? `<span class="price">🎁 бесплатно сегодня</span>` : `<span class="price">${ECON.ENTRY} ${PG}</span>`);
   const n = Streak.current(), need = ECON.STREAK_DAYS;
   const dots = Array.from({ length: need }, (_, i) => `<i class="${i < Math.min(n, need) ? 'on' : ''}"></i>`).join('');
@@ -1050,7 +1083,8 @@ $('btnHelp').onclick = () => toast(
 
 // ---------- Правила ----------
 function renderRules() {
-  const tiers = ECON.TIERS.map(t => `<tr><td>от ${t.at} очков</td><td>${t.pay} ${PG}</td></tr>`).join('');
+  const tiers = Object.entries(ECON.PAY_SIZE).map(([n, v]) => `<tr><td>вышивка ${n}×${n}${v ? '' : ' (разминка)'}</td><td>${v} ${PG}</td></tr>`).join('')
+    + `<tr><td>всё поле зашито — к любой вышивке</td><td>+${ECON.FILL_BONUS} ${PG}</td></tr>`;
   $('rulesBody').innerHTML = `
     <div class="rcard"><h3>🧵 Как играть</h3><ul>
       <li>Забег — ${RUN_TIME} секунд. Время пойдёт с первого касания.</li>
@@ -1063,20 +1097,22 @@ function renderRules() {
       <li>Всё поле зашито нитками — <b>×${String(FILL_MULT).replace('.', ',')}</b>.</li>
       <li>Катушка — норма времени (6×6 — ${parTime(6)} с): каждая оставшаяся секунда +${SPOOL_PTS}.</li>
       <li>Время вышло — за каждую соединённую пару недошитой вышивки +${PARTIAL_PTS}.</li>
-      <li>Набор вышивок — «набор дня», одинаковый для всех, меняется в полночь. У каждой есть решение.</li></ul></div>
+      <li>Первая попытка дня — «набор дня», одинаковый для всех. Каждая следующая попытка — новый набор вышивок: решения не выучить. Размеры и число переходов всегда те же. У каждой вышивки есть решение.</li></ul></div>
     <div class="rcard"><h3>🎯 Задание дня</h3><ul>
       <li>Одно задание в день, одинаковое для всех, — проверяется по итогам забега: +${TASK_REWARD} ${PG} (в пределах дневного лимита).</li></ul></div>
     <div class="rcard"><h3>🎟 Вход</h3><ul>
       <li><b>${ECON.FREE_PER_DAY} бесплатный забег в день</b>, дальше — ${ECON.ENTRY} ${PG}.</li>
       <li>Играешь ${ECON.STREAK_DAYS} дня подряд и дольше — каждый день +1 бесплатный забег.</li></ul></div>
-    <div class="rcard"><h3>🏆 Награда — по порогам очков</h3><table>${tiers}</table>
-      <ul><li>За сутки — не больше <b>${ECON.DAILY_CAP} ${PG}</b>. Новый день — в полночь по вашему времени.</li></ul></div>
+    <div class="rcard"><h3>🏆 Награда — за вышитые узоры</h3><table>${tiers}</table>
+      <ul><li>Пропущенная и недошитая вышивки не оплачиваются (очки за пары — только в счёт).</li>
+      <li>Сколько уже заработано — видно во время забега.</li>
+      <li>За сутки — не больше <b>${ECON.DAILY_CAP} ${PG}</b>. Новый день — в полночь по вашему времени.</li></ul></div>
     <div class="rcard"><h3>🪡 Стежки</h3><ul>
       <li>Пунктир, ёлочка, цепочка, крестик — ${ECON.STITCH_PRICE} ${PG} каждый. Только внешний вид, на очки не влияют.</li></ul></div>
     <div class="rcard honest"><h3>🤝 Честно</h3><ul>
-      <li>Награда зависит <b>только от очков</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
+      <li>Награда зависит <b>только от вышитых узоров</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
       <li>У каждого цвета свой значок — играть можно, даже если плохо различаешь цвета.</li>
-      <li>Все цены и пороги — на этом экране, во время игры они не меняются.</li></ul></div>`;
+      <li>Все цены и награды — на этом экране, во время игры они не меняются.</li></ul></div>`;
 }
 $('btnRules').onclick = () => { renderRules(); show('rules'); };
 $('rulesBack').onclick = () => show('menu');
@@ -1087,7 +1123,7 @@ $('btnReset').onclick = () => {
     setTimeout(() => { b.classList.remove('confirm'); b.textContent = '↺ Сбросить демо'; }, 3000);
     return;
   }
-  ['wallet', 'day', 'streak', 'stitches', 'stitch', 'best', 'seen', 'hand'].forEach(k => localStorage.removeItem(KEY(k)));
+  ['wallet', 'day', 'streak', 'stitches', 'stitch', 'best', 'seen', 'hand', 'tries'].forEach(k => localStorage.removeItem(KEY(k)));
   location.reload();
 };
 
@@ -1138,7 +1174,12 @@ function taskLineHTML(r) {
 function onFirstStart() {
   hideHand();
   localStorage.setItem(KEY('hand'), '1');
-  if (G && G.pendingPay) { G.pendingPay = false; Wallet.pay(); }
+  if (G && G.pendingPay) {
+    G.pendingPay = false; // флаг снимается до списания — второй раз не спишется
+    const how = Wallet.pay();
+    if (how) Tries.inc(); // попытка засчитана — следующая будет с новым набором
+    if (how === 'paid') toast(`−${ECON.ENTRY} ${PG} за вход`, 1600);
+  }
 }
 function handPath() {
   const r = cv.getBoundingClientRect(), pr = G.pz.pairs[0], s = pr.sol;

@@ -157,7 +157,7 @@
 
   /* ---------- Итог ---------- */
   .overlay{position:fixed;inset:0;background:rgba(255,253,247,.96);display:none;flex-direction:column;align-items:center;
-    justify-content:center;gap:12px;z-index:20;padding:20px;animation:fadeIn .3s}
+    justify-content:safe center;gap:12px;z-index:20;padding:20px;animation:fadeIn .3s;overflow-y:auto;touch-action:pan-y}
   @keyframes fadeIn{from{opacity:0}}
   .overlay h2{margin:0;font-size:32px;text-align:center}
   .res{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--el-bg);border-radius:20px;
@@ -166,11 +166,27 @@
   .res .sub{font-size:14px;opacity:.7;text-align:center}
   .earn{display:flex;align-items:center;gap:10px;font-size:46px;font-weight:900;color:var(--graphic)}
   .earn .pg{width:44px;height:44px}
-  .tiers{display:flex;gap:4px;margin-top:4px}
-  .tiers i{display:flex;flex-direction:column;align-items:center;font-style:normal;font-size:11px;opacity:.5;
-    background:var(--accent-bg);border-radius:8px;padding:4px 6px;min-width:44px}
-  .tiers i b{font-size:14px}
-  .tiers i.got{opacity:1;background:var(--accent-text);color:#fff}
+  /* Разбивка награды: за что заплачено */
+  .lines{width:100%;display:flex;flex-direction:column;gap:3px;margin-top:2px}
+  .lines .ln{display:flex;align-items:center;gap:8px;font-size:14px;line-height:1.25;background:var(--page);border-radius:10px;padding:6px 10px}
+  .lines .ln span{flex:1}
+  .lines .ln small{display:block;opacity:.6;font-size:12px}
+  .lines .ln b{display:flex;align-items:center;gap:3px;flex:none;font-size:16px}
+  .lines .ln.cap{background:none;padding:2px 10px;color:var(--graphic);font-weight:700;font-size:13px}
+  /* Наборы коллекции */
+  .sets{display:flex;flex-direction:column;gap:6px}
+  .setRow{display:flex;align-items:center;gap:8px;font-size:13px}
+  .setRow .ic{font-size:17px;width:22px;text-align:center}
+  .setRow .nm{flex:1;min-width:0}
+  .setRow .nm small{display:block;opacity:.6;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .setRow .bar{display:block;height:5px;border-radius:3px;background:var(--accent);margin-top:3px;overflow:hidden}
+  .setRow .bar i{display:block;height:100%;background:var(--accent-text);border-radius:3px}
+  .setRow .rw{display:flex;align-items:center;gap:3px;font-weight:800;flex:none}
+  .setRow.ok .nm{opacity:.6} .setRow.ok .bar i{background:#35B98F}
+  .setsMini{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;font-size:12px;font-weight:700}
+  .setsMini i{font-style:normal;background:var(--accent-bg);border-radius:999px;padding:3px 8px}
+  .setsMini i.ok{background:#d6f2e7;color:#1f7a5c}
+  .setsMini i.new{background:var(--btn);color:var(--ink)}
   .nextTier{font-size:14px;opacity:.75;text-align:center}
   .walletLine{font-size:15px;opacity:.85;display:flex;align-items:center;gap:6px}
   .row{display:flex;gap:12px}
@@ -204,6 +220,7 @@
     .stat b{font-size:22px}
     #cur{height:104px}
     #jars{height:124px} .jar{height:116px}
+    .overlay{gap:8px} .overlay h2{font-size:26px} .earn{font-size:38px} .earn .pg{width:36px;height:36px} .res{gap:4px;padding:12px 16px}
   }
 
   /* Рука-подсказка в первом забеге */
@@ -244,6 +261,7 @@
     <div class="brandSub">мини-игра для «Пуговок»</div>
     <button class="big" id="btnPlay">Сортировать! 🧺<small id="playSub"></small></button>
     <div class="card" id="streakCard"></div>
+    <div class="card"><h4>Коллекция в шкатулке</h4><div class="sets" id="setsCard"></div></div>
     <div class="card"><h4>Баночки</h4><div class="styles" id="styles"></div></div>
     <div class="menuRow">
       <button class="pill" id="btnRules">📜 Правила</button>
@@ -261,7 +279,7 @@
   <header>
     <div class="stat"><span>Счёт</span><b id="score">0</b></div>
     <div class="stat"><span>Время</span><b id="timer">1:00</b></div>
-    <div class="stat"><span>Награда</span><b id="reward">0 <span class="pg"></span></b></div>
+    <div class="stat"><span>Заработано</span><b id="reward">+0 <span class="pg"></span></b></div>
   </header>
   <div class="rule" id="rule"></div>
   <div class="comboBar" id="comboBar"></div>
@@ -279,7 +297,7 @@
   <h2>Правила и награды</h2>
   <div class="rulesBody" id="rulesBody"></div>
   <button class="ghost resetBtn" id="btnReset">↺ Сбросить демо</button>
-  <p class="smallHint">Вернёт стартовый баланс и обнулит баночки, серию и рекорд</p>
+  <p class="smallHint">Вернёт стартовый баланс и обнулит баночки, коллекцию, серию и рекорд</p>
 </div>
 
 <!-- Итог -->
@@ -289,8 +307,9 @@
     <p>Счёт: <b id="overScore">0</b></p>
     <div class="sub" id="overStats"></div>
     <div class="earn">+<span id="overEarn">0</span><span class="pg"></span></div>
-    <div class="tiers" id="overTiers"></div>
+    <div class="lines" id="overLines"></div>
     <div class="nextTier" id="overNext"></div>
+    <div class="setsMini" id="overSets"></div>
     <div class="taskLine" id="overTask"></div>
   </div>
   <div class="walletLine">На счёте: <span class="pg"></span><b id="overWallet">0</b></div>
@@ -306,19 +325,22 @@ const $ = id => document.getElementById(id);
 const PG = '<span class="pg"></span>';
 const KEY = k => 'pk-' + k; // своё демо-хранилище у этой игры
 
+// <logic> ---------- Чистая логика без DOM (её же запускает симуляция баланса) ----------
 // ---------- Экономика ----------
 const ECON = {
   START_WALLET: 100,
   FREE_PER_DAY: 1,
   ENTRY: 10,
-  // Пороги подобраны симуляцией (400 забегов на тип игрока по набору дня):
-  // медиана новичок ~650, средний ~1320, хороший ~2330, сильный ~4270.
-  TIERS: [
-    { at: 620, pay: 2 },
-    { at: 1250, pay: 5 },
-    { at: 2100, pay: 8 },
-    { at: 3250, pay: 12 },
-    { at: 4650, pay: 16 },
+  // Награда за забег — за разложенные пуговицы: каждая верная засчитывается по множителю серии
+  // (×1…×4: каждые 8 подряд без ошибки +1) и +1 за быстрый ответ; каждые PAY_EVERY засчитанных = 1 пуговка.
+  PAY_EVERY: 28,
+  // Коллекция: разложенные пуговицы копятся в шкатулке между забегами.
+  // Собранный набор — разовый бонус (в пределах дневного лимита).
+  SETS: [
+    { id: 'rainbow', name: 'Радуга',            icon: '🌈', need: { red: 25, violet: 25, mint: 25, gold: 25 }, bonus: 2 },
+    { id: 'size',    name: 'Великаны и крошки', icon: '📏', need: { big: 50, small: 50 }, bonus: 3 },
+    { id: 'holes',   name: 'Две и четыре',      icon: '🕳', need: { h2: 50, h4: 50 }, bonus: 3 },
+    { id: 'full',    name: 'Полная шкатулка',   icon: '👑', need: { red: 100, violet: 100, mint: 100, gold: 100 }, bonus: 10 },
   ],
   DAILY_CAP: 60,
   STREAK_DAYS: 3,
@@ -329,6 +351,87 @@ const MISS_PENALTY = 2;
 // Очки: 10 за верный ответ + до 10 за скорость (≤0.5 с — все 10, ≥2 с — 0), всё × множитель серии
 const speedBonus = rt => Math.max(0, Math.round(10 * (1 - (rt - .5) / 1.5)));
 const multFor = combo => Math.min(4, 1 + Math.floor(combo / 8));
+// Сколько засчитывается за верную пуговицу: множитель серии (×1…×4) и +1 за быстрый ответ (как «быстрых» в итоге)
+const isFast = rt => speedBonus(rt) >= 8;
+const creditOf = (combo, rt) => multFor(combo) + (isFast(rt) ? 1 : 0);
+
+// ---------- Набор дня: пуговицы и смена правил ----------
+// У каждого цвета свой значок — играть можно и тем, кто плохо различает цвета
+const COLORS = [
+  { id: 'red', c: '#E8623E', name: 'красные', sym: '●' },
+  { id: 'violet', c: '#6260C6', name: 'фиолетовые', sym: '▲' },
+  { id: 'mint', c: '#35B98F', name: 'мятные', sym: '■' },
+  { id: 'gold', c: '#E9B23A', name: 'жёлтые', sym: '★' },
+];
+// Фазы по номеру пуговицы. rule: 'color' | 'size' | 'holes'; n — сколько баночек
+const PHASES = [
+  { from: 0,  rule: 'color', n: 2, mix: false, shuffle: false },
+  { from: 8,  rule: 'color', n: 3, mix: false, shuffle: false },
+  { from: 20, rule: 'color', n: 4, mix: true,  shuffle: false },
+  { from: 30, rule: 'size',  n: 2, mix: true,  shuffle: false },
+  { from: 38, rule: 'color', n: 4, mix: true,  shuffle: true },
+  { from: 52, rule: 'holes', n: 2, mix: true,  shuffle: false },
+  { from: 60, rule: 'color', n: 4, mix: true,  shuffle: true },
+];
+// После 80-й пуговицы правило меняется каждые 8: цвет → размер → дырочки…
+function phaseOf(i) {
+  if (i >= 80) {
+    const k = Math.floor((i - 80) / 8) % 3;
+    return { from: 80 + Math.floor((i - 80) / 8) * 8, rule: ['color', 'size', 'holes'][k], n: k ? 2 : 4, mix: true, shuffle: true };
+  }
+  let p = PHASES[0];
+  for (const q of PHASES) if (i >= q.from) p = q;
+  return p;
+}
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function hashStr(s) { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+function makeSet(seed, count = 200) {
+  const rnd = mulberry32(seed), items = [], jarsAt = {};
+  for (let i = 0; i < count; i++) {
+    const ph = phaseOf(i);
+    // Баночки фазы (порядок перемешивается, если shuffle)
+    if (!jarsAt[ph.from]) {
+      let keys = ph.rule === 'color' ? COLORS.slice(0, ph.n).map(c => c.id) : ph.rule === 'size' ? ['big', 'small'] : ['h2', 'h4'];
+      if (ph.shuffle) for (let k = keys.length - 1; k > 0; k--) { const j = Math.floor(rnd() * (k + 1)); [keys[k], keys[j]] = [keys[j], keys[k]]; }
+      jarsAt[ph.from] = keys;
+    }
+    const colorPool = ph.rule === 'color' ? ph.n : 4;
+    const color = COLORS[Math.floor(rnd() * colorPool)].id;
+    const big = ph.mix ? rnd() < .5 : true;
+    const holes = ph.mix ? (rnd() < .5 ? 2 : 4) : 4;
+    const answer = ph.rule === 'color' ? color : ph.rule === 'size' ? (big ? 'big' : 'small') : (holes === 2 ? 'h2' : 'h4');
+    items.push({ color, big, holes, answer, phase: ph.from, rule: ph.rule });
+  }
+  return { items, jarsAt };
+}
+
+// ---------- Коллекция в шкатулке ----------
+const COLL_KEYS = ['red', 'violet', 'mint', 'gold', 'big', 'small', 'h2', 'h4'];
+const emptyColl = () => Object.fromEntries(COLL_KEYS.map(k => [k, 0]));
+function collAdd(coll, it) { coll[it.color]++; coll[it.big ? 'big' : 'small']++; coll[it.holes === 2 ? 'h2' : 'h4']++; }
+function setProgress(s, coll) {
+  let have = 0, need = 0;
+  for (const k in s.need) { have += Math.min(s.need[k], coll[k] || 0); need += s.need[k]; }
+  return { have, need, done: have >= need };
+}
+// Награда за забег — одна функция для игры, итога и симуляции.
+// run: { right, credit, got } — разложено, засчитано с серией, что попало в коллекцию за забег.
+// coll / done — коллекция и собранные наборы ДО забега.
+function rewardOf(run, coll = emptyColl(), done = []) {
+  const pay = Math.floor(run.credit / ECON.PAY_EVERY);
+  const lines = [{ kind: 'run', label: `Разложено ${run.right} · с серией засчитано ${run.credit}`, qty: run.credit, each: ECON.PAY_EVERY, sum: pay }];
+  const after = { ...emptyColl(), ...coll };
+  for (const k of COLL_KEYS) after[k] += run.got ? run.got[k] || 0 : 0;
+  const newSets = [];
+  for (const s of ECON.SETS) {
+    if (done.includes(s.id) || !setProgress(s, after).done) continue;
+    newSets.push(s.id);
+    lines.push({ kind: 'set', label: `${s.icon} Набор «${s.name}» собран`, qty: 1, each: s.bonus, sum: s.bonus });
+  }
+  return { total: lines.reduce((a, l) => a + l.sum, 0), lines, after, newSets, toNext: ECON.PAY_EVERY - run.credit % ECON.PAY_EVERY };
+}
+// </logic>
+
 
 // ---------- День, серия, кошелёк ----------
 function dateKey(shift = 0) {
@@ -360,7 +463,6 @@ const Wallet = {
     if (how) Streak.touch();
     return how;
   },
-  rewardFor(score) { let p = 0; for (const t of ECON.TIERS) if (score >= t.at) p = t.pay; return p; },
   credit(n) {
     const d = this.day(); const got = Math.max(0, Math.min(n, ECON.DAILY_CAP - d.earned));
     d.earned += got; this.saveDay(d); this.balance += got; return got;
@@ -370,6 +472,27 @@ const save = {
   get best() { return +localStorage.getItem(KEY('best')) || 0; },
   set best(v) { localStorage.setItem(KEY('best'), v); },
 };
+// Коллекция в шкатулке: разложенные пуговицы копятся между забегами (ключи pk-coll, pk-sets)
+const Coll = {
+  get() { return { ...emptyColl(), ...readJSON('coll', {}) }; },
+  done() { return readJSON('sets', []); },
+  save(coll, done) { writeJSON('coll', coll); writeJSON('sets', done); },
+};
+const COLL_SYM = { red: '●', violet: '▲', mint: '■', gold: '★', big: 'больших', small: 'маленьких', h2: 'с 2 дыр.', h4: 'с 4 дыр.' };
+// Что осталось до набора: «● 3 · ★ 7» или «маленьких 12»
+function setLeftText(s, coll) {
+  return Object.entries(s.need).filter(([k, n]) => (coll[k] || 0) < n)
+    .map(([k, n]) => `${COLL_SYM[k]} ${n - (coll[k] || 0)}`).join(' · ');
+}
+function setsCardHTML() {
+  const coll = Coll.get(), done = Coll.done();
+  return ECON.SETS.map(s => {
+    const pr = setProgress(s, coll), ok = done.includes(s.id), pct = ok ? 100 : Math.round(pr.have / pr.need * 100);
+    return `<div class="setRow${ok ? ' ok' : ''}"><span class="ic">${ok ? '✅' : s.icon}</span>
+      <span class="nm">${s.name}<small>${ok ? 'собран' : 'осталось: ' + setLeftText(s, coll)}</small><span class="bar"><i style="width:${pct}%"></i></span></span>
+      <span class="rw">+${s.bonus} ${PG}</span></div>`;
+  }).join('');
+}
 
 // ---------- Стили баночек (косметика) ----------
 const STYLES = [
@@ -437,55 +560,7 @@ function toast(html, ms = 3600) {
 }
 
 // ---------- Набор дня: пуговицы и смена правил ----------
-// У каждого цвета свой значок — играть можно и тем, кто плохо различает цвета
-const COLORS = [
-  { id: 'red', c: '#E8623E', name: 'красные', sym: '●' },
-  { id: 'violet', c: '#6260C6', name: 'фиолетовые', sym: '▲' },
-  { id: 'mint', c: '#35B98F', name: 'мятные', sym: '■' },
-  { id: 'gold', c: '#E9B23A', name: 'жёлтые', sym: '★' },
-];
 const symOf = id => COLORS.find(c => c.id === id).sym;
-// Фазы по номеру пуговицы. rule: 'color' | 'size' | 'holes'; n — сколько баночек
-const PHASES = [
-  { from: 0,  rule: 'color', n: 2, mix: false, shuffle: false },
-  { from: 8,  rule: 'color', n: 3, mix: false, shuffle: false },
-  { from: 20, rule: 'color', n: 4, mix: true,  shuffle: false },
-  { from: 30, rule: 'size',  n: 2, mix: true,  shuffle: false },
-  { from: 38, rule: 'color', n: 4, mix: true,  shuffle: true },
-  { from: 52, rule: 'holes', n: 2, mix: true,  shuffle: false },
-  { from: 60, rule: 'color', n: 4, mix: true,  shuffle: true },
-];
-// После 80-й пуговицы правило меняется каждые 8: цвет → размер → дырочки…
-function phaseOf(i) {
-  if (i >= 80) {
-    const k = Math.floor((i - 80) / 8) % 3;
-    return { from: 80 + Math.floor((i - 80) / 8) * 8, rule: ['color', 'size', 'holes'][k], n: k ? 2 : 4, mix: true, shuffle: true };
-  }
-  let p = PHASES[0];
-  for (const q of PHASES) if (i >= q.from) p = q;
-  return p;
-}
-function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-function hashStr(s) { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
-function makeSet(seed, count = 200) {
-  const rnd = mulberry32(seed), items = [], jarsAt = {};
-  for (let i = 0; i < count; i++) {
-    const ph = phaseOf(i);
-    // Баночки фазы (порядок перемешивается, если shuffle)
-    if (!jarsAt[ph.from]) {
-      let keys = ph.rule === 'color' ? COLORS.slice(0, ph.n).map(c => c.id) : ph.rule === 'size' ? ['big', 'small'] : ['h2', 'h4'];
-      if (ph.shuffle) for (let k = keys.length - 1; k > 0; k--) { const j = Math.floor(rnd() * (k + 1)); [keys[k], keys[j]] = [keys[j], keys[k]]; }
-      jarsAt[ph.from] = keys;
-    }
-    const colorPool = ph.rule === 'color' ? ph.n : 4;
-    const color = COLORS[Math.floor(rnd() * colorPool)].id;
-    const big = ph.mix ? rnd() < .5 : true;
-    const holes = ph.mix ? (rnd() < .5 ? 2 : 4) : 4;
-    const answer = ph.rule === 'color' ? color : ph.rule === 'size' ? (big ? 'big' : 'small') : (holes === 2 ? 'h2' : 'h4');
-    items.push({ color, big, holes, answer, phase: ph.from, rule: ph.rule });
-  }
-  return { items, jarsAt };
-}
 
 // ---------- Отрисовка ----------
 const colorHex = id => COLORS.find(c => c.id === id).c;
@@ -506,7 +581,7 @@ const RULE_TEXT = { color: '🎨 Сортируй по цвету', size: '📏 
 let G = null;
 function newRun() {
   const set = makeSet(hashStr('pk-' + dateKey()));
-  G = { ...set, i: 0, score: 0, shown: 0, combo: 0, bestCombo: 0, right: 0, wrong: 0, fast: 0,
+  G = { ...set, i: 0, score: 0, shown: 0, combo: 0, bestCombo: 0, right: 0, wrong: 0, fast: 0, credit: 0, got: emptyColl(),
     timeLeft: RUN_TIME, started: false, over: false, shownAt: 0, lastTick: RUN_TIME, phaseShown: -1, lock: 0, fill: {} };
 }
 function curItem() { return G.items[G.i]; }
@@ -549,8 +624,9 @@ function answer(key, jarEl) {
   const rt = (performance.now() - G.shownAt) / 1000;
   if (key === it.answer) {
     const bonus = speedBonus(rt), m = multFor(G.combo), pts = (10 + bonus) * m;
+    G.credit += creditOf(G.combo, rt); collAdd(G.got, it);
     G.combo++; G.bestCombo = Math.max(G.bestCombo, G.combo); G.right++;
-    if (bonus >= 8) G.fast++;
+    if (isFast(rt)) G.fast++;
     addScore(pts);
     floatText(`+${pts}`, bonus >= 8 ? 'fast' : '');
     G.fill[key] = (G.fill[key] || 0) + 1;
@@ -589,9 +665,10 @@ function flyTo(jarEl) {
 function addScore(v) {
   G.score += v;
   const el = $('score'); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
-  const r = Wallet.rewardFor(G.score), rEl = $('reward');
+  // Счётчик заработанного за забег (только за разложенные; наборы — на итоге)
+  const r = Math.floor(G.credit / ECON.PAY_EVERY), rEl = $('reward');
   if (+rEl.dataset.v !== r) {
-    rEl.dataset.v = r; rEl.innerHTML = `${r} ${PG}`;
+    rEl.dataset.v = r; rEl.innerHTML = `+${r} ${PG}`;
     if (r > 0) { rEl.classList.remove('pulse'); void rEl.offsetWidth; rEl.classList.add('pulse'); }
   }
 }
@@ -631,7 +708,7 @@ function startRun(pending = false) {
   show('game');
   newRun();
   $('score').textContent = '0';
-  $('reward').dataset.v = 0; $('reward').innerHTML = `0 ${PG}`;
+  $('reward').dataset.v = 0; $('reward').innerHTML = `+0 ${PG}`;
   updateTimer(RUN_TIME);
   $('comboBar').innerHTML = '';
   showItem();
@@ -643,15 +720,17 @@ function startRun(pending = false) {
 }
 function play() {
   if (G && !G.over && $('game').classList.contains('active')) return; // двойное нажатие: забег уже идёт, второй раз не списываем
-  const how = Wallet.pay();
-  if (!how) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
-  startRun();
-  if (how === 'paid') toast(`−${ECON.ENTRY} ${PG} за вход`, 1600);
+  if (!Wallet.canPlay()) { toast(`Не хватает пуговок: забег стоит ${ECON.ENTRY} ${PG}<br>Бесплатная попытка — завтра`); return; }
+  // Вход (бесплатный или платный) списывается при первом ответе — вышел в меню до него, ничего не потрачено
+  startRun(true);
 }
 function endRun() {
   G.over = true;
   const sc = G.score;
-  const earned = Wallet.credit(Wallet.rewardFor(sc));
+  const collBefore = Coll.get(), doneBefore = Coll.done();
+  const rw = rewardOf({ right: G.right, credit: G.credit, got: G.got }, collBefore, doneBefore);
+  Coll.save(rw.after, doneBefore.concat(rw.newSets));
+  const earned = Wallet.credit(rw.total);
   const taskRes = Task.check({ score: sc, right: G.right, wrong: G.wrong, fast: G.fast, bestCombo: G.bestCombo });
   const isBest = sc > save.best;
   if (isBest) save.best = sc;
@@ -659,10 +738,16 @@ function endRun() {
   $('overScore').textContent = sc;
   $('overStats').innerHTML = `Разложено: <b>${G.right}</b> · ошибок: <b>${G.wrong}</b> · быстрых: <b>${G.fast}</b> · лучшая серия: <b>${G.bestCombo}</b>`
     + (isBest && sc > 0 ? '<br>🏆 Новый рекорд!' : '');
-  $('overTiers').innerHTML = ECON.TIERS.map(t => `<i class="${sc >= t.at ? 'got' : ''}"><b>${t.pay}</b>${t.at}</i>`).join('');
-  const next = ECON.TIERS.find(t => sc < t.at), capHit = earned < Wallet.rewardFor(sc);
-  $('overNext').innerHTML = capHit ? 'Дневной лимит наград исчерпан — приходите завтра'
-    : next ? `До награды ${next.pay} ${PG} не хватило ${next.at - sc} очков` : 'Максимальная награда! 👑';
+  const capHit = earned < rw.total;
+  $('overLines').innerHTML = rw.lines.map(l => l.kind === 'run'
+    ? `<div class="ln"><span>${l.label}<small>каждые ${l.each} засчитанных = 1 ${PG}</small></span><b>+${l.sum} ${PG}</b></div>`
+    : `<div class="ln"><span>${l.label}</span><b>+${l.sum} ${PG}</b></div>`).join('')
+    + (capHit ? `<div class="ln cap"><span>Дневной лимит ${ECON.DAILY_CAP} ${PG}: начислено ${earned} из ${rw.total}</span></div>` : '');
+  $('overNext').innerHTML = nextHint(rw);
+  $('overSets').innerHTML = ECON.SETS.map(s => {
+    const pr = setProgress(s, rw.after), isNew = rw.newSets.includes(s.id), ok = isNew || doneBefore.includes(s.id);
+    return `<i class="${isNew ? 'new' : ok ? 'ok' : ''}">${s.icon} ${ok ? '✓' : Math.round(pr.have / pr.need * 100) + '%'}</i>`;
+  }).join('');
   const tl = taskLineHTML(taskRes); $('overTask').className = tl.cls; $('overTask').innerHTML = tl.html;
   $('overWallet').textContent = Wallet.balance;
   const again = $('overAgain');
@@ -677,6 +762,19 @@ function endRun() {
     let k = 0;
     const id = setInterval(() => { el.textContent = Math.min(++k, earned); if (k >= earned || $('over').style.display !== 'flex') clearInterval(id); else SFX.tick(); }, 70);
   }, 400);
+}
+// Одна строка-подсказка, как получить больше
+function nextHint(rw) {
+  const coll = rw.after, done = Coll.done();
+  // Ближайший несобранный набор, если до него недалеко
+  let best = null;
+  for (const s of ECON.SETS) {
+    if (done.includes(s.id)) continue;
+    const pr = setProgress(s, coll), left = pr.need - pr.have;
+    if (left <= 30 && (!best || left < best.left)) best = { s, left };
+  }
+  if (best) return `До набора «${best.s.name}» осталось ${setLeftText(best.s, coll)} — +${best.s.bonus} ${PG}`;
+  return `Ещё ${rw.toNext} засчитанных — и +1 ${PG}. Серия без ошибок засчитывает ×2…×4`;
 }
 $('btnPlay').onclick = play;
 $('overAgain').onclick = play;
@@ -695,6 +793,7 @@ function renderMenu() {
     : Streak.playedToday() ? `ещё ${need - n} дн. до +1 бесплатного забега` : `сыграй сегодня — до бонуса ${need - n} дн.`;
   $('streakCard').innerHTML = `<div class="dRow"><span class="ic">🔥</span><span>Серия: ${n} дн.<span class="dots3">${dots}</span><small>${sub}</small></span></div>`;
   $('streakCard').innerHTML += taskRowHTML();
+  $('setsCard').innerHTML = setsCardHTML();
   renderStyles();
 }
 function renderStyles() {
@@ -727,7 +826,9 @@ $('btnHelp').onclick = () => toast(
 
 // ---------- Правила ----------
 function renderRules() {
-  const tiers = ECON.TIERS.map(t => `<tr><td>от ${t.at} очков</td><td>${t.pay} ${PG}</td></tr>`).join('');
+  const NAMES = { red: '● красных', violet: '▲ фиолетовых', mint: '■ мятных', gold: '★ жёлтых', big: 'больших', small: 'маленьких', h2: 'с 2 дырочками', h4: 'с 4 дырочками' };
+  const needText = need => { const v = Object.values(need); return Object.keys(need).length === 4 && v.every(x => x === v[0]) ? `по ${v[0]} каждого цвета` : Object.entries(need).map(([k, n]) => `${n} ${NAMES[k]}`).join(' и '); };
+  const sets = ECON.SETS.map(s => `<tr><td>${s.icon} ${s.name}: ${needText(s.need)}</td><td>+${s.bonus} ${PG}</td></tr>`).join('');
   $('rulesBody').innerHTML = `
     <div class="rcard"><h3>🧺 Как играть</h3><ul>
       <li>${RUN_TIME} секунд. Пуговицы появляются по одной — нажми на нужную баночку.</li>
@@ -742,14 +843,19 @@ function renderRules() {
     <div class="rcard"><h3>🎟 Вход</h3><ul>
       <li><b>${ECON.FREE_PER_DAY} бесплатный забег в день</b>, дальше — ${ECON.ENTRY} ${PG}.</li>
       <li>Играешь ${ECON.STREAK_DAYS} дня подряд и дольше — каждый день +1 бесплатный забег.</li></ul></div>
-    <div class="rcard"><h3>🏆 Награда — по порогам очков</h3><table>${tiers}</table>
-      <ul><li>За сутки — не больше <b>${ECON.DAILY_CAP} ${PG}</b>. Новый день — в полночь по вашему времени.</li></ul></div>
+    <div class="rcard"><h3>🏆 Награда — за разложенные пуговицы</h3><ul>
+      <li>Каждая верно разложенная пуговица засчитывается по серии: ×1, после 8 подряд без ошибки ×2 … до ×4. Быстрый ответ (быстрее 0,9 с) — ещё +1.</li>
+      <li>Каждые <b>${ECON.PAY_EVERY}</b> засчитанных = <b>1 ${PG}</b>. Сколько уже заработано — видно во время забега.</li>
+      <li>За сутки — не больше <b>${ECON.DAILY_CAP} ${PG}</b>. Новый день — в полночь по вашему времени.</li></ul></div>
+    <div class="rcard"><h3>🧺 Коллекция и наборы</h3>
+      <p style="margin:0 0 6px">Все разложенные пуговицы остаются в вашей шкатулке. Собрали набор — разовый бонус (в пределах дневного лимита):</p>
+      <table>${sets}</table></div>
     <div class="rcard"><h3>🫙 Баночки</h3><ul>
       <li>Другие баночки — ${ECON.STYLE_PRICE} ${PG} каждые. Только внешний вид.</li></ul></div>
     <div class="rcard honest"><h3>🤝 Честно</h3><ul>
-      <li>Награда зависит <b>только от очков</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
+      <li>Награда зависит <b>только от того, как вы разложили</b>: никаких случайных выигрышей, лотерей и сундуков.</li>
       <li>Набор пуговиц один на всех — ни у кого нет «удачного» расклада.</li>
-      <li>Все цены и пороги — на этом экране, во время игры они не меняются.</li></ul></div>`;
+      <li>Все цены и наборы — на этом экране, во время игры они не меняются.</li></ul></div>`;
 }
 $('btnRules').onclick = () => { renderRules(); show('rules'); };
 $('rulesBack').onclick = () => show('menu');
@@ -760,7 +866,7 @@ $('btnReset').onclick = () => {
     setTimeout(() => { b.classList.remove('confirm'); b.textContent = '↺ Сбросить демо'; }, 3000);
     return;
   }
-  ['wallet', 'day', 'streak', 'styles', 'style', 'best', 'seen', 'hand'].forEach(k => localStorage.removeItem(KEY(k)));
+  ['wallet', 'day', 'streak', 'styles', 'style', 'best', 'seen', 'hand', 'coll', 'sets'].forEach(k => localStorage.removeItem(KEY(k)));
   location.reload();
 };
 
@@ -814,7 +920,11 @@ function taskLineHTML(r) {
 function onFirstStart() {
   hideHand();
   localStorage.setItem(KEY('hand'), '1');
-  if (G && G.pendingPay) { G.pendingPay = false; Wallet.pay(); }
+  if (G && G.pendingPay) {
+    G.pendingPay = false; // флаг снимается до списания — второй раз не спишется
+    const how = Wallet.pay();
+    if (how === 'paid') toast(`−${ECON.ENTRY} ${PG} за вход`, 1600);
+  }
 }
 function handPath() {
   const it = curItem(), j = [...document.querySelectorAll('.jar')].find(x => x.dataset.k === it.answer);
