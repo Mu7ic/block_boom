@@ -102,11 +102,14 @@ func _run() -> void:
 	g.start_game("classic")
 	await wait(0.5)
 	var tr := g.tray.get_global_rect()
+	var over := g.board_view.get_global_rect().get_center()
 	g._start_drag(0, tr.get_center())
-	g._move_drag(g.board_view.get_global_rect().get_center() + Vector2(0, g.drag.lift))
+	g._move_drag(over + Vector2(0, g.drag.lift))
 	await wait(0.1)
-	check(not g.board_view.preview.is_empty(), "drag preview over board")
 	await shot("05_drag")
+	# Настоящая мышь над окном могла сдвинуть фигуру — ставим её снова и проверяем в том же кадре
+	g._move_drag(over + Vector2(0, g.drag.lift))
+	check(not g.board_view.preview.is_empty(), "drag preview over board")
 	g._end_drag()
 	await wait(0.4)
 	check(g.pieces.count(null) == 1, "drag placed a piece")
@@ -185,6 +188,70 @@ func _run() -> void:
 	await shot("16_online_end")
 	main._on_net({"t": "oppLeft"})
 	check(not g.ov_duel.right.visible, "online: rematch hidden after opponent left")
+
+	# Вызов дня: у всех одинаковое стартовое поле и фигуры
+	g.start_game("daily")
+	await wait(0.4)
+	var filled := g.board.filter(func(c): return c != null).size()
+	check(filled == 10, "daily: 10 start blocks (%d)" % filled)
+	var sig := func() -> String:
+		return str(GameScreen.bits(g.board)) + ":" + ",".join(g.pieces.map(func(p): return "%d/%s" % [p.s, p.color.to_html()]))
+	var first: String = sig.call()
+	g.start_game("daily")
+	await wait(0.2)
+	check(sig.call() == first, "daily: same board and pieces on restart")
+	await shot("17_daily")
+	moves = 0
+	while not g.finished and moves < 200:
+		if not await play_one(g):
+			break
+		moves += 1
+		await get_tree().process_frame
+	await wait(2.0)
+	print("daily moves=", moves, " score=", g.score)
+	check(g.ov_lose.root.visible, "daily: result shown")
+	check(Save.daily_best(BB.today()) == g.score or Save.daily_best(BB.today()) > 0, "daily: best saved")
+	check(Save.daily_streak == 1, "daily: streak 1 (%d)" % Save.daily_streak)
+	await wait(5.5)   # ответ сервера или «нет связи»
+	print("daily overlay: ", g.ov_lose.text.text.replace("\n", " | "))
+	check(not g.ov_lose.text.text.contains("Загружаем"), "daily: table loaded or offline note")
+	await shot("18_daily_end")
+
+	# Задания дня и сундук
+	var ml := Missions.list()
+	check(ml.size() == 3, "missions: 3 today")
+	print("missions: ", ml.map(func(m): return "%s %d/%d" % [m.id, m.prog, m.target]))
+	Missions.keys = 3
+	var before := Save.got().size() + Save.effects_got().size()
+	main.open_missions()
+	await wait(0.3)
+	main.open_chest()
+	check(Save.got().size() + Save.effects_got().size() == before + 1 and Missions.keys == 0, "missions: chest gives a reward")
+	await wait(0.4)
+	await shot("19_missions")
+
+	# Эффекты очистки
+	for e in BB.EFFECTS:
+		Save.add_effect(e[0])
+	main.open_collection()
+	await wait(0.3)
+	var c0 := main.get_global_rect().get_center()
+	for k in BB.EFFECTS.size():
+		main.fx.burst(c0 + Vector2((k - 2.5) * 110, 0), BB.COLORS[k], 6, 0.0, BB.EFFECTS[k][0])
+	await wait(0.35)
+	await shot("20_effects")
+	Save.effect = "stars"
+	main.show_screen("menu")
+	await wait(0.6)
+	await shot("21_menu_new")
+
+	# Лобби: поиск соперника
+	main.open_online()
+	await wait(0.2)
+	main.lobby_view("search")
+	await wait(0.5)
+	await shot("22_search")
+	main.lobby_view("main")
 
 	# Экраны
 	main.open_collection()

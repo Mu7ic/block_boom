@@ -48,7 +48,7 @@ const RAW := [
 ## (онлайн-соперник присылает номер стиля).
 const SKINS := [
 	["classic", "Классика"],
-	["disco", "Диско-шар 🪩"],
+	["disco", "Диско-шар ✨"],
 	["melon", "Арбузики 🍉"],
 	["egg", "Яичница 🍳"],
 	["neon", "Неон"],
@@ -63,7 +63,7 @@ const SKINS := [
 	["cookie", "Печеньки 🍪"],
 	["wood", "Дерево"],
 	["galaxy", "Космос 🌌"],
-	["bubble", "Пузыри 🫧"],
+	["bubble", "Пузыри 🔵"],
 	["heart", "Сердечки 💖"],
 	["matrix", "Матрица"],
 	["pizza", "Пицца 🍕"],
@@ -118,3 +118,52 @@ static func is_color_str(v) -> bool:
 		return false
 	var s: String = v
 	return s.length() == 7 and s[0] == "#" and s.substr(1).is_valid_hex_number()
+
+
+# ---------- Лиги онлайн-рейтинга ----------
+## [порог рейтинга, название, значок, цвет]
+const LEAGUES := [
+	[0, "Бронза", "🥉", Color("d9935a")],
+	[1100, "Серебро", "🥈", Color("cfd8e8")],
+	[1250, "Золото", "🥇", Color("ffd84d")],
+	[1400, "Платина", "💠", Color("6fe0e0")],
+	[1600, "Алмаз", "💎", Color("9fb4ff")],
+]
+
+
+static func league(rating: int) -> Array:
+	var out: Array = LEAGUES[0]
+	for l in LEAGUES:
+		if rating >= l[0]:
+			out = l
+	return out
+
+
+## «🥈 Серебро · 1180»
+static func league_text(rating: int) -> String:
+	var l := league(rating)
+	return "%s %s · %d" % [l[2], l[1], rating]
+
+
+## День по UTC, как у сервера: «2026-11-27»
+static func today() -> String:
+	return Time.get_date_string_from_unix_time(int(Time.get_unix_time_from_system()))
+
+
+# ---------- Эффекты очистки линий ----------
+## [id, название, значок] — открываются в сундуке заданий
+const EFFECTS := [
+	["confetti", "Конфетти", "🎊"],
+	["sparks", "Искры", "✨"],
+	["stars", "Звёзды", "⭐"],
+	["hearts", "Сердечки", "💖"],
+	["bubbles", "Пузыри", "🔵"],
+	["rings", "Волны", "🌀"],
+]
+
+
+static func effect_index(id: String) -> int:
+	for i in EFFECTS.size():
+		if EFFECTS[i][0] == id:
+			return i
+	return 0

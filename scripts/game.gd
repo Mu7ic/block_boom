@@ -28,6 +28,9 @@ var drag := {}
 var duel := {}
 var bot := {}
 var opp_name := "Соперник"
+var ranked := false                   ## онлайн-бой из быстрого поиска (меняет рейтинг)
+var daily_day := ""                   ## вызов дня: дата (UTC) и генератор с общим для всех зерном
+var daily_rng := RandomNumberGenerator.new()
 var _tok := 0
 var _bot_tok := 0
 var _score_tw: Tween
@@ -255,15 +258,15 @@ func pick_fruit() -> String:
 	return need[0].f
 
 
-func new_piece(s := -1) -> Dictionary:
+func new_piece(s := -1, rng: RandomNumberGenerator = null) -> Dictionary:
 	if s < 0:
-		s = randi() % BB.SHAPES.size()
+		s = (rng.randi() if rng else randi()) % BB.SHAPES.size()
 	var sh: Dictionary = BB.SHAPES[s]
 	var fruits: Array[String] = []
 	fruits.resize(sh.cells.size())
 	fruits.fill("")
 	var p := {"s": s, "cells": sh.cells, "fruits": fruits, "h": sh.h, "w": sh.w, "base": sh.base,
-		"color": BB.COLORS[randi() % BB.COLORS.size()]}
+		"color": BB.COLORS[(rng.randi() if rng else randi()) % BB.COLORS.size()]}
 	if mode == "arcade":
 		var n := 1 if randf() < 0.55 else 0
 		if n and sh.cells.size() >= 4 and randf() < 0.3:
@@ -283,6 +286,10 @@ func smart_set(b: Array, g: Dictionary) -> Array:
 
 
 func refill() -> void:
+	if mode == "daily":
+		# Вызов дня: тройки идут из общего генератора и не зависят от поля — у всех одинаковые
+		pieces = [new_piece(-1, daily_rng), new_piece(-1, daily_rng), new_piece(-1, daily_rng)]
+		return
 	var smart := smart_set(board, gen)
 	if not smart.is_empty():
 		pieces = smart
@@ -354,6 +361,24 @@ func seed_stones(count: int) -> void:
 		placed += 1
 
 
+## Стартовое поле вызова дня: несколько блоков из того же генератора
+func seed_daily() -> void:
+	daily_rng.seed = hash("blockboom-daily-" + daily_day)
+	var placed := 0
+	var tries := 0
+	while placed < 10 and tries < 200:
+		tries += 1
+		var i := daily_rng.randi() % (N * N)
+		var c: Color = BB.COLORS[daily_rng.randi() % BB.COLORS.size()]
+		if board[i] != null:
+			continue
+		board[i] = {"c": c, "f": ""}
+		if BBAI.full_lines(bits(board))[1] > 0:
+			board[i] = null
+			continue
+		placed += 1
+
+
 # ---------- Отрисовка ----------
 func render_board() -> void:
 	board_view.cells = board
@@ -390,6 +415,9 @@ func render_hud() -> void:
 	if mode == "classic":
 		score_l = _stat("Счёт", str(score))
 		best_l = _stat("Рекорд", str(Save.best))
+	elif mode == "daily":
+		score_l = _stat("Вызов дня", str(score))
+		best_l = _stat("Лучший сегодня", str(Save.daily_best(daily_day)))
 	elif mode == "duel" or mode == "online":
 		score_l = _stat("Ты", str(score))
 		timer_l = _stat("Время", "3:00")
@@ -437,6 +465,10 @@ func update_score() -> void:
 		if score > Save.best:
 			Save.best = score
 		best_l.text = str(Save.best)
+	elif mode == "daily":
+		if score > Save.daily_best(daily_day):
+			Save.set_daily_best(daily_day, score)
+		best_l.text = str(Save.daily_best(daily_day))
 	var from := shown_score
 	var to := score
 	if _score_tw:
@@ -505,6 +537,9 @@ func start_game(m: String, n := 1) -> void:
 		var def := BB.level_def(level)
 		goals = def.goals
 		seed_stones(def.stones)
+	if mode == "daily":
+		daily_day = BB.today()
+		seed_daily()
 	refill()
 	main.show_screen("game")
 	apply_skin(Save.skin, false)
@@ -519,6 +554,8 @@ func start_game(m: String, n := 1) -> void:
 		main.hint_once("arcade", "🍓 Фрукты спрятаны в блоках.\nОчищай линии с ними, чтобы выполнить задание сверху!")
 	if mode == "duel":
 		main.hint_once("duel", "⏱ У вас 3 минуты!\nНабери больше очков, чем бот 🤖")
+	if mode == "daily":
+		main.hint_once("daily", "📅 Сегодня у всех одинаковые фигуры.\nНабери больше всех — и попади в таблицу дня!")
 
 
 func apply_skin(i: int, remember := true) -> void:
@@ -655,6 +692,16 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 		board[idx] = null
 	var perfect := n > 0 and bits(board) == 0
 
+	# Задания дня
+	Missions.add("pieces")
+	if n > 0:
+		Missions.add("lines", n)
+		Missions.reach("combo", combo + 1)
+		if n >= 3:
+			Missions.add("triple")
+		if perfect:
+			Missions.add("perfect")
+
 	Audio.sfx("place")
 	if n > 0:
 		combo += 1
@@ -703,6 +750,8 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 		combo = 0
 		Audio.buzz(10)
 	score += gained
+	if mode != "arcade":
+		Missions.reach("score", score)
 
 	# Приземление фигуры
 	render_board()
@@ -726,6 +775,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 			for k in goals.size():
 				if goals[k].f == f and goals[k].left > 0:
 					goals[k].left -= 1
+					Missions.add("fruit")
 					var from := board_view.cell_center_global(idx)
 					later(delay, func(): _fly_fruit(from, f, k))
 					break
@@ -739,6 +789,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 
 	if mode == "arcade" and goals.all(func(g): return g.left == 0):
 		finished = true
+		Missions.add("arcade")
 		if Save.unlocked <= level:
 			Save.unlocked = mini(level + 1, BB.LEVEL_COUNT)
 		later(1.1 + max_delay, func():
@@ -750,7 +801,12 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 		return
 
 	# Новая тройка подбирается в фоне — без подтормаживания на телефоне
-	if pieces.all(func(x): return x == null):
+	if pieces.all(func(x): return x == null) and mode == "daily":
+		refill()
+		Audio.sfx("refill")
+		render_tray(true)
+		_after_move(max_delay, ev)
+	elif pieces.all(func(x): return x == null):
 		refill_async(func(): _after_move(max_delay, ev))
 	else:
 		render_tray(false)
@@ -770,8 +826,14 @@ func _after_move(max_delay: float, ev: Dictionary) -> void:
 		later(max_delay + 0.4, func():
 			board_view.anim_dead()
 			tray.nofit = [true, true, true])
+		if mode == "daily":
+			Save.daily_played(daily_day)
+			Missions.add("daily")
 		later(max_delay + 1.4, func():
-			if mode == "classic":
+			if mode == "daily":
+				_set_text(ov_lose, "Счёт: [b]%d[/b]   ·   лучший сегодня: [b]%d[/b]\n[font_size=28]🔥 Серия: %d дн.[/font_size]" % [score, Save.daily_best(daily_day), Save.daily_streak])
+				_daily_table(score)
+			elif mode == "classic":
 				_set_text(ov_lose, "Счёт: [b]%d[/b]" % score)
 			else:
 				var parts := []
@@ -782,6 +844,30 @@ func _after_move(max_delay: float, ev: Dictionary) -> void:
 			_show_overlay(ov_lose)
 			Audio.sfx("lose")
 			Audio.buzz(200))
+
+
+## Отправить результат дня и показать таблицу под счётом
+func _daily_table(sc: int) -> void:
+	var tok := _tok
+	_append_text(ov_lose, "\n[font_size=24][color=#ffffff88]Загружаем таблицу дня…[/color][/font_size]")
+	var nm: String = Save.player_name if Save.player_name != "" else "Игрок"
+	var r: Dictionary = await Net.request(Save.server, {"t": "daily", "id": Save.player_id, "name": nm, "day": daily_day, "score": sc}, "dailyTop", 5.0)
+	if tok != _tok or not ov_lose.root.visible:
+		return
+	var txt: String = ov_lose.text.text
+	ov_lose.text.text = txt.substr(0, txt.find("\n[font_size=24][color=#ffffff88]Загружаем")) + "[/center]"
+	if r.is_empty():
+		_append_text(ov_lose, "\n[font_size=24][color=#ffffff99]Таблица дня недоступна: нет связи с сервером[/color][/font_size]")
+		return
+	var lines := "\n[font_size=30][color=#ffd84d]Место %d из %d[/color][/font_size]" % [int(r.get("rank", 0)), int(r.get("total", 0))]
+	var top: Array = r.get("top", []) if r.get("top") is Array else []
+	for k in mini(top.size(), 5):
+		var e = top[k]
+		if not (e is Dictionary):
+			continue
+		var row := "%d. %s — %d" % [k + 1, _esc(str(e.get("name", "?"))), int(e.get("score", 0))]
+		lines += "\n[font_size=26]" + ("[color=#ffd84d]%s[/color]" % row if e.get("you", false) else row) + "[/font_size]"
+	_append_text(ov_lose, lines)
 
 
 func _fly_fruit(from: Vector2, f: String, k: int) -> void:
@@ -1051,6 +1137,8 @@ func end_duel() -> void:
 	var you := score
 	var them: int = bot.score
 	ov_duel.title.text = "Ты победил! 🏆" if you > them else ("Бот победил 🤖" if you < them else "Ничья 🤝")
+	if you > them:
+		Missions.add("win")
 	_set_text(ov_duel, "Ты [b]%d[/b] : [b]%d[/b] Бот" % [you, them])
 	later(0.5, func():
 		_show_overlay(ov_duel)
@@ -1155,10 +1243,11 @@ func apply_opp(m: Dictionary) -> void:
 
 func start_online_match(m: Dictionary) -> void:
 	opp_name = str(m.get("opponent", "Соперник")).substr(0, 16)
+	ranked = bool(m.get("ranked", false))
 	start_game("online")
 	_new_bot(false)
 	render_bot()
-	bot_head.text = "🧑 " + opp_name
+	bot_head.text = ("⚡ " if ranked else "🧑 ") + opp_name
 	bot_status.text = "готовится…"
 	ov_duel.right.disabled = false
 	ov_duel.right.visible = true
@@ -1178,7 +1267,7 @@ func start_online_match(m: Dictionary) -> void:
 	main.countdown(roundi(float(m.get("countdown", 3000)) / 1000.0), go, alive)
 
 
-func end_online(you: int, them: int, note: String) -> void:
+func end_online(you: int, them: int, note: String, rm := {}) -> void:
 	if mode != "online":
 		return
 	stop_duel()
@@ -1190,11 +1279,32 @@ func end_online(you: int, them: int, note: String) -> void:
 	else:
 		ov_duel.title.text = "Ты победил! 🏆" if you > them else ("%s победил" % opp_name if you < them else "Ничья 🤝")
 	_set_text(ov_duel, "Ты [b]%d[/b] : [b]%d[/b] %s" % [you, them, _esc(opp_name)])
+	_rating_result(rm)
+	if note != "" or you > them:
+		Missions.add("win")
 	ov_duel.right.disabled = note != ""
 	ov_duel.right.visible = note == ""
 	later(0.4, func():
 		_show_overlay(ov_duel)
 		_result_sound(you, them, note != ""))
+
+
+## Новый рейтинг от сервера: запоминаем и показываем под счётом
+func _rating_result(rm: Dictionary) -> void:
+	if not rm.has("rating"):
+		return
+	var old_l := BB.league(Save.rating)
+	var r := int(rm.rating)
+	var d := int(rm.get("delta", 0))
+	Save.rating = r
+	Save.rated_games += 1
+	var l := BB.league(r)
+	var col := "#7dffa0" if d >= 0 else "#ff9db5"
+	_append_text(ov_duel, "\n[font_size=28]%s  [color=%s]%s%d[/color][/font_size]" % [BB.league_text(r), col, "+" if d >= 0 else "", d])
+	if l[0] > old_l[0]:
+		_append_text(ov_duel, "\n[font_size=28][color=#ffd84d]Новая лига: %s %s![/color][/font_size]" % [l[2], l[1]])
+	elif l[0] < old_l[0]:
+		_append_text(ov_duel, "\n[font_size=24]Лига: %s %s[/font_size]" % [l[2], l[1]])
 
 
 func _esc(s: String) -> String:
@@ -1216,11 +1326,11 @@ func on_net(m: Dictionary) -> bool:
 				_append_text(ov_duel, "\n[font_size=26]%s хочет реванш![/font_size]" % _esc(opp_name))
 			return true
 		"end":
-			end_online(int(m.get("you", 0)), int(m.get("them", 0)), "")
+			end_online(int(m.get("you", 0)), int(m.get("them", 0)), "", m)
 			return true
 		"oppLeft":
 			if mode == "online" and not duel.is_empty():
-				end_online(score, bot.get("score", 0), "Соперник вышел — победа! 🏆")
+				end_online(score, bot.get("score", 0), "Соперник вышел — победа! 🏆", m)
 				return true
 			if mode == "online" and ov_duel.root.visible:
 				ov_duel.right.visible = false

@@ -2,6 +2,9 @@
 // - отдаёт игру (../index.html) по HTTP
 // - по WebSocket на /ws держит комнаты на двоих: код из 4 цифр, общий таймер 3 минуты,
 //   пересылает сопернику состояние поля, в конце сам объявляет итог.
+// - быстрый поиск соперника с рейтингом Эло (бои по коду комнаты рейтинг не меняют)
+// - ежедневный вызов: таблица лучших результатов дня
+// Профили и таблицы хранятся в data.json рядом с сервером (переменная DATA_FILE).
 //
 // Запуск:  cd server && npm install && npm start      (порт: переменная PORT, по умолчанию 8765)
 
@@ -18,13 +21,78 @@ const COUNTDOWN = 3000;          // отсчёт «3-2-1» перед старт
 const DURATION = Number(process.env.DURATION_MS) || 180000; // длительность боя, мс (для тестов можно сократить)
 const GRACE = 1500;              // ждём запоздавшие ходы после конца, мс
 const WAIT_TTL = 15 * 60 * 1000; // комната без соперника живёт 15 минут
+const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json');
+const START_RATING = 1000;
+const DAILY_KEEP = 7;            // сколько дней хранить таблицы ежедневного вызова
+const DAILY_TOP = 10;
+
+// ---------- Хранилище: профили (рейтинг) и таблицы дня ----------
+// Игрок опознаётся по случайному токену, который клиент создаёт сам и хранит у себя.
+// Токен никому не показывается: в таблицах только имена и очки.
+let db = { players: {}, daily: {} };
+try { db = { players: {}, daily: {}, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }; } catch (e) { /* первый запуск */ }
+let saveTimer = null;
+function saveDb() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    const tmp = DATA_FILE + '.tmp';
+    fs.writeFile(tmp, JSON.stringify(db), err => {
+      if (err) return console.error('data.json:', err.message);
+      fs.rename(tmp, DATA_FILE, e => { if (e) console.error('data.json:', e.message); });
+    });
+  }, 1000);
+}
+const validId = id => typeof id === 'string' && /^[a-f0-9]{16,64}$/.test(id);
+function profile(id, name) {
+  if (!validId(id)) return null;
+  let p = db.players[id];
+  if (!p) { p = db.players[id] = { name: 'Игрок', rating: START_RATING, games: 0, wins: 0 }; saveDb(); }
+  if (name && p.name !== name) { p.name = name; saveDb(); }
+  return p;
+}
+const publicProfile = p => ({ t: 'profile', rating: p.rating, games: p.games, wins: p.wins });
+
+// Рейтинг Эло: новичкам (меньше 10 боёв) рейтинг меняется быстрее
+function rate(pa, pb, result) {   // result: 1 — победил a, 0 — b, 0.5 — ничья
+  const ea = 1 / (1 + Math.pow(10, (pb.rating - pa.rating) / 400));
+  const ka = pa.games < 10 ? 40 : 24, kb = pb.games < 10 ? 40 : 24;
+  const da = Math.round(ka * (result - ea));
+  const dbb = Math.round(kb * ((1 - result) - (1 - ea)));
+  pa.rating = Math.max(0, pa.rating + da);
+  pb.rating = Math.max(0, pb.rating + dbb);
+  pa.games++; pb.games++;
+  if (result === 1) pa.wins++; else if (result === 0) pb.wins++;
+  saveDb();
+  return [da, dbb];
+}
+
+// День в UTC, как у клиента: 2026-11-27
+const dayStr = (ms = Date.now()) => new Date(ms).toISOString().slice(0, 10);
+function dailyBoard(day) {
+  const b = db.daily[day] || {};
+  return Object.entries(b).map(([id, e]) => ({ id, name: e.name, score: e.score })).sort((x, y) => y.score - x.score);
+}
+function dailyReply(day, id) {
+  const all = dailyBoard(day);
+  const i = all.findIndex(e => e.id === id);
+  return {
+    t: 'dailyTop', day, total: all.length,
+    rank: i >= 0 ? i + 1 : 0, best: i >= 0 ? all[i].score : 0,
+    top: all.slice(0, DAILY_TOP).map(e => ({ name: e.name, score: e.score, you: e.id === id })),
+  };
+}
+function pruneDaily() {
+  const days = Object.keys(db.daily).sort();
+  while (days.length > DAILY_KEEP) delete db.daily[days.shift()];
+}
 
 // ---------- HTTP: отдаём игру ----------
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/health') {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end(`ok rooms=${rooms.size} players=${wss.clients.size}`);
+    res.end(`ok rooms=${rooms.size} players=${wss.clients.size} queue=${queue.length}`);
     return;
   }
   if (url !== '/' && url !== '/index.html') {
@@ -45,7 +113,8 @@ const server = http.createServer((req, res) => {
 
 // ---------- WebSocket: комнаты ----------
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 32 * 1024 });
-const rooms = new Map(); // код → { code, players: [ws], state: 'waiting'|'playing'|'ended', ... }
+const rooms = new Map(); // код → { code, players: [ws], state: 'waiting'|'playing'|'ended', ranked, ... }
+const queue = [];        // быстрый поиск: [{ ws, since }]
 
 const send = (ws, msg) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); };
 const other = (room, ws) => room.players.find(p => p !== ws);
@@ -65,7 +134,7 @@ function startMatch(room) {
   room.ready = new Set();
   room.endAt = Date.now() + COUNTDOWN + DURATION;
   for (const p of room.players) {
-    send(p, { t: 'start', countdown: COUNTDOWN, duration: DURATION, opponent: other(room, p).name });
+    send(p, { t: 'start', countdown: COUNTDOWN, duration: DURATION, opponent: other(room, p).name, ranked: !!room.ranked });
   }
   room.endTimer = setTimeout(() => finish(room), COUNTDOWN + DURATION + GRACE);
 }
@@ -75,19 +144,71 @@ function finish(room) {
   const [a, b] = room.players;
   if (!a || !b) return;
   const sa = room.scores.get(a) || 0, sb = room.scores.get(b) || 0;
-  send(a, { t: 'end', you: sa, them: sb });
-  send(b, { t: 'end', you: sb, them: sa });
+  const ra = {}, rb = {};
+  if (room.ranked) applyRating(a, b, sa > sb ? 1 : sa < sb ? 0 : 0.5, ra, rb);
+  send(a, { t: 'end', you: sa, them: sb, ...ra });
+  send(b, { t: 'end', you: sb, them: sa, ...rb });
 }
 
+// Обновить рейтинг пары; в out-объекты кладём новый рейтинг и изменение для сообщений
+function applyRating(a, b, result, outA, outB) {
+  const pa = db.players[a.pid], pb = db.players[b.pid];
+  if (!pa || !pb) return;
+  const [da, dbb] = rate(pa, pb, result);
+  Object.assign(outA, { rating: pa.rating, delta: da });
+  Object.assign(outB, { rating: pb.rating, delta: dbb });
+}
+
+function unqueue(ws) {
+  const i = queue.findIndex(q => q.ws === ws);
+  if (i >= 0) queue.splice(i, 1);
+}
+
+// Подбор пар: чем дольше ждёшь, тем шире допустимая разница рейтинга
+function matchQueue() {
+  const now = Date.now();
+  for (let i = 0; i < queue.length; i++) {
+    const a = queue[i];
+    const ra = db.players[a.ws.pid]?.rating ?? START_RATING;
+    let best = -1, bestDiff = Infinity;
+    for (let j = i + 1; j < queue.length; j++) {
+      const b = queue[j];
+      if (b.ws.pid === a.ws.pid) continue;   // один игрок в двух окнах
+      const rb = db.players[b.ws.pid]?.rating ?? START_RATING;
+      const diff = Math.abs(ra - rb);
+      const allow = 150 + 40 * Math.min((now - a.since) / 1000, (now - b.since) / 1000);
+      if (diff <= allow && diff < bestDiff) { best = j; bestDiff = diff; }
+    }
+    if (best < 0) continue;
+    const b = queue[best];
+    queue.splice(best, 1);
+    queue.splice(i, 1);
+    i--;
+    const code = newCode();
+    const r = { code, players: [a.ws, b.ws], state: 'waiting', ranked: true };
+    rooms.set(code, r);
+    a.ws.room = r;
+    b.ws.room = r;
+    startMatch(r);
+  }
+}
+setInterval(matchQueue, 1000);
+
 function leave(ws) {
+  unqueue(ws);
   const room = ws.room;
   if (!room) return;
   ws.room = null;
   room.players = room.players.filter(p => p !== ws);
   const rest = room.players[0];
   if (rest) {
-    if (room.state === 'playing') { clearTimeout(room.endTimer); room.state = 'ended'; }
-    send(rest, { t: 'oppLeft' });
+    const msg = { t: 'oppLeft' };
+    if (room.state === 'playing') {
+      clearTimeout(room.endTimer);
+      room.state = 'ended';
+      if (room.ranked) applyRating(rest, ws, 1, msg, {});   // вышел из рейтингового боя — поражение
+    }
+    send(rest, msg);
   }
   if (!room.players.length) {
     clearTimeout(room.endTimer);
@@ -106,6 +227,42 @@ wss.on('connection', ws => {
     const room = ws.room;
 
     switch (m.t) {
+      case 'hello': {
+        // Профиль игрока: рейтинг и число боёв
+        const p = profile(m.id, m.name && cleanName(m.name));
+        if (!p) return send(ws, { t: 'error', msg: 'Нет профиля' });
+        ws.pid = m.id;
+        send(ws, publicProfile(p));
+        break;
+      }
+      case 'quick': {
+        const p = profile(m.id, cleanName(m.name));
+        if (!p) return send(ws, { t: 'error', msg: 'Нет профиля' });
+        leave(ws);
+        ws.pid = m.id;
+        ws.name = cleanName(m.name);
+        queue.push({ ws, since: Date.now() });
+        send(ws, { ...publicProfile(p), t: 'queued' });
+        matchQueue();
+        break;
+      }
+      case 'daily': {
+        // Результат ежедневного вызова; без score — просто запрос таблицы
+        if (!validId(m.id)) return send(ws, { t: 'error', msg: 'Нет профиля' });
+        const today = dayStr(), yesterday = dayStr(Date.now() - 86400000);
+        const day = m.day === yesterday ? yesterday : today;   // партия могла начаться до полуночи
+        if (m.score !== undefined && m.score !== null) {
+          const score = Math.max(0, Math.min(1e7, Math.floor(Number(m.score) || 0)));
+          const b = db.daily[day] || (db.daily[day] = {});
+          const e = b[m.id];
+          if (!e || score > e.score) b[m.id] = { name: cleanName(m.name), score };
+          else e.name = cleanName(m.name);
+          pruneDaily();
+          saveDb();
+        }
+        send(ws, dailyReply(day, m.id));
+        break;
+      }
       case 'create': {
         leave(ws);
         const code = newCode();
@@ -114,6 +271,7 @@ wss.on('connection', ws => {
         rooms.set(code, r);
         ws.room = r;
         ws.name = cleanName(m.name);
+        if (validId(m.id)) ws.pid = m.id;
         send(ws, { t: 'created', code });
         break;
       }
@@ -124,6 +282,7 @@ wss.on('connection', ws => {
         if (r.players.length >= 2) return send(ws, { t: 'error', msg: 'В этой комнате уже играют' });
         leave(ws);
         ws.name = cleanName(m.name);
+        if (validId(m.id)) ws.pid = m.id;
         r.players.push(ws);
         ws.room = r;
         startMatch(r);
@@ -146,6 +305,7 @@ wss.on('connection', ws => {
         break;
       }
       case 'leave':
+      case 'cancel':
         leave(ws);
         break;
     }

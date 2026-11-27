@@ -14,6 +14,16 @@ var tog_sound: Widgets.Toggle
 var tog_music: Widgets.Toggle
 var tog_vibro: Widgets.Toggle
 var menu_logo: Widgets.Logo
+var daily_btn: Button
+var mis_btn: Button
+var mis_dot: Control
+# задания
+var mis_box: VBoxContainer
+var keys_l: Label
+var chest_btn: Button
+var reward_l: Label
+var renew_l: Label
+var eff_grid: GridContainer
 # уровни / коллекция
 var level_grid: GridContainer
 var coll_grid: GridContainer
@@ -25,7 +35,14 @@ var server_in: LineEdit
 var code_in: LineEdit
 var lobby_main: Control
 var lobby_wait: Control
+var lobby_search: Control
 var lobby_status: Label
+var rating_l: Label
+var search_l: Label
+var search_time_l: Label
+var bot_offer: Button
+var search_t0 := 0.0
+const BOT_OFFER_AFTER := 15.0   ## через сколько секунд поиска предложить бота
 var big_code: Label
 var wait_label: Label
 var lobby_code := ""
@@ -68,6 +85,7 @@ func _ready() -> void:
 	_build_menu()
 	_build_levels()
 	_build_collection()
+	_build_missions()
 	_build_online()
 	game = GameScreen.new()
 	game.main = self
@@ -78,6 +96,9 @@ func _ready() -> void:
 	add_child(fx)
 	fx.z_index = 30
 	Net.message.connect(_on_net)
+	Missions.done.connect(func(txt: String):
+		toast("🎯 Задание выполнено! +🔑\n" + txt)
+		Audio.sfx("record"))
 	show_screen("splash")
 
 
@@ -108,8 +129,11 @@ func _go_back() -> void:
 	elif current == "menu":
 		get_tree().quit()
 	elif current == "online":
-		Net.send({"t": "leave"})
-		show_screen("menu")
+		if lobby_search.visible or lobby_wait.visible:
+			cancel_search()
+		else:
+			Net.send({"t": "leave"})
+			show_screen("menu")
 	elif current != "splash":
 		show_screen("menu")
 
@@ -193,30 +217,33 @@ func _build_menu() -> void:
 	var b1 := UI.big_button("Классика", "играй на рекорд", BB.C_YELLOW)
 	b1.pressed.connect(func(): game.start_game("classic"))
 	v.add_child(UI.centered(b1))
+	daily_btn = UI.big_button("Вызов дня 📅", "", Color("ffa93b"))
+	daily_btn.pressed.connect(func(): game.start_game("daily"))
+	v.add_child(UI.centered(daily_btn))
 	var b2 := UI.big_button("Аркада", "уровни с фруктами", BB.C_BLUE)
 	b2.pressed.connect(open_levels)
 	v.add_child(UI.centered(b2))
 	var b3 := UI.big_button("Против бота 🤖", "кто больше за 3 минуты", BB.C_PINK)
 	b3.pressed.connect(func(): game.start_game("duel"))
 	v.add_child(UI.centered(b3))
-	var b4 := UI.big_button("Онлайн-бой 🌐", "с другом по коду комнаты", BB.C_GREEN)
+	var b4 := UI.big_button("Онлайн-бой 🌐", "рейтинг и бои с друзьями", BB.C_GREEN)
 	b4.pressed.connect(open_online)
 	v.add_child(UI.centered(b4))
 
+	for b in [b1, daily_btn, b2, b3, b4]:
+		b.custom_minimum_size.y = 104
+
 	var row := UI.hrow(v, 18)
 	coll_btn = UI.button("🎨 Коллекция", Color(1, 1, 1, 0.14), Color.WHITE, 27, Vector2(0, 74))
-	_pad(coll_btn, 30)
+	_pad(coll_btn, 26)
 	coll_btn.pressed.connect(open_collection)
 	row.add_child(coll_btn)
-	coll_dot = Panel.new()
-	coll_dot.add_theme_stylebox_override("panel", UI.box(BB.C_HOT))
-	coll_dot.size = Vector2(16, 16)
-	coll_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	coll_btn.add_child(coll_dot)
-	var help := UI.button("❓ Как играть", Color(1, 1, 1, 0.14), Color.WHITE, 27, Vector2(0, 74))
-	_pad(help, 30)
-	help.pressed.connect(open_tutorial)
-	row.add_child(help)
+	coll_dot = _dot(coll_btn)
+	mis_btn = UI.button("🎯 Задания", Color(1, 1, 1, 0.14), Color.WHITE, 27, Vector2(0, 74))
+	_pad(mis_btn, 26)
+	mis_btn.pressed.connect(open_missions)
+	row.add_child(mis_btn)
+	mis_dot = _dot(mis_btn)
 
 	var row2 := UI.hrow(v, 18)
 	tog_sound = Widgets.Toggle.new("🔊")
@@ -238,7 +265,21 @@ func _build_menu() -> void:
 	row2.add_child(tog_vibro)
 	for t in [tog_sound, tog_music, tog_vibro]:
 		t.pressed.connect(func(): Audio.sfx("click"))
+	var help := Widgets.Toggle.new("❓")
+	help.pressed.connect(func():
+		Audio.sfx("click")
+		open_tutorial())
+	row2.add_child(help)
 	refresh_toggles()
+
+
+func _dot(parent: Control) -> Control:
+	var d := Panel.new()
+	d.add_theme_stylebox_override("panel", UI.box(BB.C_HOT))
+	d.size = Vector2(16, 16)
+	d.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(d)
+	return d
 
 
 func _pad(b: Button, p: int) -> void:
@@ -258,10 +299,17 @@ func refresh_toggles() -> void:
 func update_menu() -> void:
 	coll_btn.text = "🎨 Коллекция %d/%d" % [Save.got().size(), BB.SKINS.size()]
 	coll_dot.visible = Save.has_new_skins()
+	mis_btn.text = "🎯 Задания %d/3" % Missions.done_count()
+	mis_dot.visible = Missions.chest_ready()
 	await get_tree().process_frame
 	coll_dot.position = Vector2(coll_btn.size.x - 24, 6)
+	mis_dot.position = Vector2(mis_btn.size.x - 24, 6)
 	menu_logo.restart()
 	refresh_toggles()
+	var sub: Label = daily_btn.get_child(0).get_child(1)
+	var st := Save.daily_streak
+	var best := Save.daily_best(BB.today())
+	sub.text = ("🔥 серия %d дн." % st if st > 0 else "одни фигуры для всех") + (" · лучший %d" % best if best > 0 else "")
 
 
 # ---------- Уровни Аркады ----------
@@ -339,10 +387,21 @@ func _build_collection() -> void:
 	coll_grid.add_theme_constant_override("h_separation", 16)
 	coll_grid.add_theme_constant_override("v_separation", 16)
 	v.add_child(UI.centered(coll_grid))
-	var hint := UI.label("Новый стиль открывается, когда сносишь 3+ линии за один ход", 25, Color(1, 1, 1, 0.6), UI.F_REG)
+	var hint := UI.label("Стили открываются, когда сносишь 3+ линии за ход, и в сундуке заданий. Нажми на стиль — начнёшь игру с ним.", 25, Color(1, 1, 1, 0.6), UI.F_REG)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.custom_minimum_size = Vector2(540, 0)
+	hint.custom_minimum_size = Vector2(560, 0)
 	v.add_child(UI.centered(hint))
+	var sp2 := Control.new()
+	sp2.custom_minimum_size = Vector2(0, 16)
+	v.add_child(sp2)
+	v.add_child(UI.label("Эффекты очистки", 40, Color.WHITE, UI.F_BLACK))
+	eff_grid = GridContainer.new()
+	eff_grid.columns = 3
+	eff_grid.add_theme_constant_override("h_separation", 16)
+	eff_grid.add_theme_constant_override("v_separation", 16)
+	v.add_child(UI.centered(eff_grid))
+	var hint2 := UI.label("Новые эффекты — в сундуке за задания дня 🎁", 25, Color(1, 1, 1, 0.6), UI.F_REG)
+	v.add_child(UI.centered(hint2))
 	var bottom := Control.new()
 	bottom.custom_minimum_size = Vector2(0, 50)
 	v.add_child(bottom)
@@ -378,17 +437,153 @@ func open_collection() -> void:
 		nm.custom_minimum_size = Vector2(138, 52)
 		cv.add_child(nm)
 		coll_grid.add_child(card)
+		if open:
+			_selectable(card, func():
+				Save.skin = i
+				open_collection())
 		if open and not seen.has(id):
 			var badge := UI.label("NEW", 18, Color.WHITE, UI.F_BLACK)
 			badge.add_theme_stylebox_override("normal", UI.box(BB.C_HOT, 14, Vector4(10, 2, 10, 2)))
 			badge.position = Vector2(56, -34)
 			prev.add_child(badge)
+	_fill_effects()
 	coll_text.text = "Собрано %d из %d" % [got.size(), BB.SKINS.size()]
 	coll_bar.max_value = BB.SKINS.size()
 	coll_bar.value = 0
 	coll_bar.create_tween().tween_property(coll_bar, "value", float(got.size()), 0.6)
 	Save.mark_seen()
 	show_screen("collection")
+
+
+## Карточка-кнопка: нажатие выбирает стиль или эффект
+func _selectable(card: Control, cb: Callable) -> void:
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	card.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			Audio.sfx("click")
+			cb.call())
+
+
+func _fill_effects() -> void:
+	for ch in eff_grid.get_children():
+		ch.queue_free()
+	var got := Save.effects_got()
+	for e in BB.EFFECTS:
+		var id: String = e[0]
+		var open := got.has(id)
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(196, 0)
+		var sb := UI.box(Color(0, 0, 0, 0.22), 26, Vector4(6, 16, 6, 14))
+		if id == Save.effect:
+			sb.border_color = BB.C_GOLD
+			sb.set_border_width_all(4)
+		card.add_theme_stylebox_override("panel", sb)
+		var cv := VBoxContainer.new()
+		cv.add_theme_constant_override("separation", 6)
+		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(cv)
+		cv.add_child(UI.label(e[2] if open else "🔒", 52))
+		cv.add_child(UI.label(e[1] if open else "???", 22, Color(1, 1, 1, 0.9 if open else 0.4), UI.F_BOLD))
+		eff_grid.add_child(card)
+		if open:
+			_selectable(card, func():
+				Save.effect = id
+				var c := card.get_global_rect().get_center()
+				_fill_effects()
+				for k in 4:
+					fx.burst(c, BB.COLORS[(k * 3) % 8], 5, k * 0.05, id))
+
+
+# ---------- Задания дня ----------
+func _build_missions() -> void:
+	var s := _screen("missions")
+	var v := UI.center_box(s, 22)
+	v.add_child(UI.label("Задания дня 🎯", 50, Color.WHITE, UI.F_BLACK))
+	renew_l = UI.label("", 25, Color(1, 1, 1, 0.55), UI.F_REG)
+	v.add_child(renew_l)
+	mis_box = VBoxContainer.new()
+	mis_box.add_theme_constant_override("separation", 16)
+	v.add_child(UI.centered(mis_box))
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 10)
+	v.add_child(gap)
+	keys_l = UI.label("", 44, BB.C_GOLD, UI.F_BLACK)
+	v.add_child(keys_l)
+	chest_btn = UI.big_button("🎁 Открыть сундук", "новый стиль или эффект", BB.C_GOLD)
+	chest_btn.pressed.connect(open_chest)
+	v.add_child(UI.centered(chest_btn))
+	reward_l = UI.label("", 32, Color.WHITE, UI.F_BLACK)
+	reward_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reward_l.custom_minimum_size = Vector2(600, 90)
+	v.add_child(UI.centered(reward_l))
+	_back_button(s, func(): show_screen("menu"))
+
+
+func open_missions() -> void:
+	for ch in mis_box.get_children():
+		ch.queue_free()
+	for m in Missions.list():
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(600, 0)
+		var sb := UI.box(Color(0.31, 0.84, 0.48, 0.3) if m.done else Color(0, 0, 0, 0.22), 26, Vector4(28, 18, 28, 18))
+		card.add_theme_stylebox_override("panel", sb)
+		mis_box.add_child(card)
+		var cv := VBoxContainer.new()
+		cv.add_theme_constant_override("separation", 10)
+		card.add_child(cv)
+		var h := HBoxContainer.new()
+		cv.add_child(h)
+		var t := UI.label(Missions.text(m), 28, Color.WHITE, UI.F_BOLD, HORIZONTAL_ALIGNMENT_LEFT)
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		h.add_child(t)
+		h.add_child(UI.label("✓ 🔑" if m.done else "%d/%d" % [m.prog, m.target], 28, BB.C_GOLD if m.done else Color(1, 1, 1, 0.7), UI.F_BLACK))
+		if not m.done:
+			var bar := ProgressBar.new()
+			bar.show_percentage = false
+			bar.custom_minimum_size = Vector2(0, 14)
+			bar.add_theme_stylebox_override("background", UI.box(Color(0, 0, 0, 0.3), 7))
+			bar.add_theme_stylebox_override("fill", UI.box(BB.C_YELLOW, 7))
+			bar.max_value = m.target
+			bar.value = m.prog
+			cv.add_child(bar)
+	reward_l.text = ""
+	_update_chest()
+	var now_d := Time.get_datetime_dict_from_system()
+	var left: int = (23 - now_d.hour) * 60 + (59 - now_d.minute)
+	renew_l.text = "Новые задания через %d ч %d мин" % [left / 60, left % 60]
+	show_screen("missions")
+
+
+func _update_chest() -> void:
+	var k := Missions.keys
+	keys_l.text = "🔑 %d / %d" % [mini(k, Missions.KEYS_PER_CHEST), Missions.KEYS_PER_CHEST] + ("  (+%d)" % (k - Missions.KEYS_PER_CHEST) if k > Missions.KEYS_PER_CHEST else "")
+	chest_btn.disabled = not Missions.chest_ready()
+	chest_btn.modulate.a = 1.0 if Missions.chest_ready() else 0.55
+
+
+func open_chest() -> void:
+	var r := Missions.open_chest()
+	if r.is_empty():
+		return
+	var c := chest_btn.get_global_rect().get_center()
+	chest_btn.pivot_offset = chest_btn.size * 0.5
+	var tw := chest_btn.create_tween()
+	tw.tween_property(chest_btn, "scale", Vector2.ONE * 1.15, 0.12)
+	tw.tween_property(chest_btn, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK)
+	for k in 8:
+		fx.burst(c, BB.COLORS[k], 6, k * 0.04, "confetti")
+	Audio.sfx("skin")
+	Audio.buzz([30, 40, 80])
+	match r.kind:
+		"skin":
+			reward_l.text = "Новый стиль блоков: %s! 🎨" % r.name
+		"effect":
+			reward_l.text = "Новый эффект: %s! ✨\nВыбери его в коллекции" % r.name
+		_:
+			reward_l.text = "Ты уже собрал всё! 🏆"
+	_update_chest()
 
 
 # ---------- Онлайн-лобби ----------
@@ -406,19 +601,24 @@ func _build_online() -> void:
 	v.add_child(UI.centered(name_in))
 
 	lobby_main = VBoxContainer.new()
-	lobby_main.add_theme_constant_override("separation", 22)
+	lobby_main.add_theme_constant_override("separation", 20)
 	v.add_child(lobby_main)
-	var create := UI.big_button("Создать бой", "получишь код для друга", BB.C_YELLOW)
+	rating_l = UI.label("", 30, Color.WHITE, UI.F_BLACK)
+	lobby_main.add_child(rating_l)
+	var quick := UI.big_button("⚡ Быстрый бой", "соперник по рейтингу", BB.C_YELLOW)
+	quick.pressed.connect(quick_match)
+	lobby_main.add_child(UI.centered(quick))
+	lobby_main.add_child(UI.label("или с другом — без рейтинга", 25, Color(1, 1, 1, 0.5), UI.F_REG))
+	var create := UI.button("Создать комнату", Color(1, 1, 1, 0.16), Color.WHITE, 30, Vector2(470, 84))
 	create.pressed.connect(create_room)
 	lobby_main.add_child(UI.centered(create))
-	lobby_main.add_child(UI.label("или", 26, Color(1, 1, 1, 0.5), UI.F_REG))
 	var jr := UI.hrow(lobby_main, 16)
 	code_in = LineEdit.new()
 	code_in.placeholder_text = "Код"
 	code_in.max_length = 4
 	code_in.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	code_in.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
-	code_in.custom_minimum_size = Vector2(220, 0)
+	code_in.custom_minimum_size = Vector2(270, 0)
 	code_in.add_theme_font_size_override("font_size", 40)
 	code_in.text_changed.connect(func(txt: String):
 		var digits := ""
@@ -430,7 +630,7 @@ func _build_online() -> void:
 			code_in.caret_column = digits.length())
 	code_in.text_submitted.connect(func(_t): join_room())
 	jr.add_child(code_in)
-	var join := UI.button("Войти", BB.C_YELLOW, BB.C_INK, 32, Vector2(180, 84))
+	var join := UI.button("Войти", Color(1, 1, 1, 0.16), Color.WHITE, 30, Vector2(184, 84))
 	join.pressed.connect(join_room)
 	jr.add_child(join)
 
@@ -449,11 +649,30 @@ func _build_online() -> void:
 	share.pressed.connect(share_room)
 	lobby_wait.add_child(UI.centered(share))
 	var cancel := UI.button("Отмена", Color(1, 1, 1, 0.14), Color.WHITE, 30, Vector2(220, 80))
-	cancel.pressed.connect(func():
-		Net.send({"t": "leave"})
-		lobby_view(false)
-		set_lobby_status(""))
+	cancel.pressed.connect(cancel_search)
 	lobby_wait.add_child(UI.centered(cancel))
+
+	# Быстрый бой: поиск соперника
+	lobby_search = VBoxContainer.new()
+	lobby_search.add_theme_constant_override("separation", 18)
+	lobby_search.visible = false
+	v.add_child(lobby_search)
+	search_l = UI.label("Ищем соперника", 38, Color.WHITE, UI.F_BLACK)
+	lobby_search.add_child(search_l)
+	search_time_l = UI.label("0:00", 80, BB.C_GOLD, UI.F_BLACK)
+	UI.shadow(search_time_l, 8)
+	lobby_search.add_child(search_time_l)
+	var hint := UI.label("Подбираем игрока с похожим рейтингом", 25, Color(1, 1, 1, 0.6), UI.F_REG)
+	lobby_search.add_child(hint)
+	bot_offer = UI.button("🤖 Пока сыграть с ботом", Color(1, 1, 1, 0.14), Color.WHITE, 27, Vector2(0, 74))
+	_pad(bot_offer, 30)
+	bot_offer.pressed.connect(func():
+		cancel_search()
+		game.start_game("duel"))
+	lobby_search.add_child(UI.centered(bot_offer))
+	var cancel2 := UI.button("Отмена", Color(1, 1, 1, 0.14), Color.WHITE, 30, Vector2(220, 80))
+	cancel2.pressed.connect(cancel_search)
+	lobby_search.add_child(UI.centered(cancel2))
 
 	lobby_status = UI.label("", 27, Color("ffb3d9"), UI.F_BOLD)
 	lobby_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -480,23 +699,70 @@ func _build_online() -> void:
 	tm.autostart = true
 	tm.timeout.connect(func():
 		dots[0] = (dots[0] + 1) % 4
-		wait_label.text = "Ждём соперника" + ".".repeat(dots[0]))
+		wait_label.text = "Ждём соперника" + ".".repeat(dots[0])
+		search_l.text = "Ищем соперника" + ".".repeat(dots[0])
+		if lobby_search.visible:
+			var sec := int(now() - search_t0)
+			search_time_l.text = "%d:%02d" % [sec / 60, sec % 60]
+			bot_offer.visible = sec >= BOT_OFFER_AFTER)
 	s.add_child(tm)
+
+
+func now() -> float:
+	return Time.get_ticks_msec() / 1000.0
 
 
 func open_online() -> void:
 	name_in.text = Save.player_name
 	server_in.text = Save.server
 	code_in.text = ""
-	lobby_view(false)
+	lobby_view("main")
 	set_lobby_status("")
+	update_rating_label()
 	show_screen("online")
+	refresh_profile()
 
 
-func lobby_view(waiting: bool) -> void:
-	lobby_main.visible = not waiting
-	lobby_wait.visible = waiting
-	name_in.visible = not waiting
+## Состояние лобби: "main" — кнопки, "wait" — код комнаты, "search" — быстрый поиск
+func lobby_view(state: String) -> void:
+	lobby_main.visible = state == "main"
+	lobby_wait.visible = state == "wait"
+	lobby_search.visible = state == "search"
+	name_in.visible = state == "main"
+	if state == "search":
+		search_t0 = now()
+		search_time_l.text = "0:00"
+		bot_offer.visible = false
+
+
+func update_rating_label() -> void:
+	var g := Save.rated_games
+	var l := BB.league(Save.rating)
+	rating_l.text = BB.league_text(Save.rating) + ("" if g == 0 else "  ·  боёв: %d" % g)
+	rating_l.add_theme_color_override("font_color", l[3])
+
+
+## Рейтинг с сервера (тихо, без сообщений об ошибке)
+func refresh_profile() -> void:
+	var r: Dictionary = await Net.request(Save.server, {"t": "hello", "id": Save.player_id, "name": Save.player_name}, "profile", 4.0)
+	if r.is_empty():
+		return
+	Save.rating = int(r.get("rating", Save.rating))
+	Save.rated_games = int(r.get("games", Save.rated_games))
+	if current == "online":
+		update_rating_label()
+
+
+func quick_match() -> void:
+	if not await ensure_connected():
+		return
+	Net.send({"t": "quick", "id": Save.player_id, "name": player_name()})
+
+
+func cancel_search() -> void:
+	Net.send({"t": "cancel"})
+	lobby_view("main")
+	set_lobby_status("")
 
 
 func set_lobby_status(t: String) -> void:
@@ -522,7 +788,7 @@ func ensure_connected() -> bool:
 func create_room() -> void:
 	if not await ensure_connected():
 		return
-	Net.send({"t": "create", "name": player_name()})
+	Net.send({"t": "create", "name": player_name(), "id": Save.player_id})
 
 
 func join_room() -> void:
@@ -532,7 +798,7 @@ func join_room() -> void:
 		return
 	if not await ensure_connected():
 		return
-	Net.send({"t": "join", "code": code, "name": player_name()})
+	Net.send({"t": "join", "code": code, "name": player_name(), "id": Save.player_id})
 
 
 func share_room() -> void:
@@ -546,21 +812,31 @@ func _on_net(m: Dictionary) -> void:
 		"created":
 			lobby_code = str(m.get("code", ""))
 			big_code.text = lobby_code
-			lobby_view(true)
+			lobby_view("wait")
 			set_lobby_status("")
 			return
+		"queued":
+			Save.rating = int(m.get("rating", Save.rating))
+			Save.rated_games = int(m.get("games", Save.rated_games))
+			update_rating_label()
+			lobby_view("search")
+			set_lobby_status("")
+			return
+		"profile", "dailyTop":
+			return   # ответы на запросы (Net.request)
 		"error":
-			lobby_view(false)
-			set_lobby_status(str(m.get("msg", "Ошибка")))
+			if current == "online":
+				lobby_view("main")
+				set_lobby_status(str(m.get("msg", "Ошибка")))
 			return
 	if game.on_net(m):
 		return
 	if current == "online":
 		if t == "oppLeft":
-			lobby_view(false)
+			lobby_view("main")
 			set_lobby_status("Соперник отключился")
 		elif t == "closed":
-			lobby_view(false)
+			lobby_view("main")
 			set_lobby_status("Связь с сервером потеряна")
 
 

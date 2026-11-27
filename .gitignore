@@ -6,3 +6,7 @@ node_modules/
 /build/
 *.apk
 *.idsig
+
+# Данные сервера (рейтинги, таблицы дня)
+server/data.json
+server/data.json.tmp

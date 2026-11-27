@@ -26,6 +26,7 @@ config/icon="res://icon.svg"
 Save="*res://scripts/save.gd"
 Audio="*res://scripts/audio.gd"
 Net="*res://scripts/net.gd"
+Missions="*res://scripts/missions.gd"
 
 [display]
 

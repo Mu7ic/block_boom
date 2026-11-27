@@ -55,6 +55,55 @@ var server: String:
 	set(v): set_v("server", v)
 
 
+# ---------- Онлайн-профиль ----------
+## Случайный токен игрока: по нему сервер хранит рейтинг. Никому не показывается.
+var player_id: String:
+	get:
+		var id: String = get_v("pid", "")
+		if id.length() < 32:
+			id = Crypto.new().generate_random_bytes(16).hex_encode()
+			set_v("pid", id)
+		return id
+## Последний известный рейтинг (с сервера), чтобы показывать его и без связи
+var rating: int:
+	get: return get_v("rating", 1000)
+	set(v): set_v("rating", v)
+var rated_games: int:
+	get: return get_v("rated_games", 0)
+	set(v): set_v("rated_games", v)
+
+
+# ---------- Вызов дня ----------
+func daily_best(day: String) -> int:
+	return get_v("daily_best", 0) if get_v("daily_day", "") == day else 0
+
+
+func set_daily_best(day: String, v: int) -> void:
+	set_v("daily_day", day)
+	set_v("daily_best", v)
+
+
+## Серия дней подряд; если пропущен день — серия сгорела
+var daily_streak: int:
+	get:
+		var last: String = get_v("daily_last", "")
+		if last == BB.today() or last == _day_before(BB.today()):
+			return get_v("daily_streak", 0)
+		return 0
+
+
+func daily_played(day: String) -> void:
+	var last: String = get_v("daily_last", "")
+	if last == day:
+		return
+	set_v("daily_streak", get_v("daily_streak", 0) + 1 if last == _day_before(day) else 1)
+	set_v("daily_last", day)
+
+
+func _day_before(day: String) -> String:
+	return Time.get_date_string_from_unix_time(Time.get_unix_time_from_datetime_string(day) - 86400)
+
+
 # ---------- Коллекция стилей ----------
 func got() -> Array:
 	return get_v("got", [])
@@ -84,6 +133,23 @@ func has_new_skins() -> bool:
 		if not sn.has(id):
 			return true
 	return false
+
+
+# ---------- Эффекты очистки ----------
+var effect: String:
+	get: return get_v("effect", "confetti")
+	set(v): set_v("effect", v)
+
+
+func effects_got() -> Array:
+	return get_v("effects", ["confetti"])
+
+
+func add_effect(id: String) -> void:
+	var e := effects_got()
+	if not e.has(id):
+		e.append(id)
+		set_v("effects", e)
 
 
 # ---------- Одноразовые подсказки ----------

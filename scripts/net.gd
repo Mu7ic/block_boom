@@ -46,6 +46,25 @@ func connect_to(url: String) -> String:
 	return "error"
 
 
+## Отправить и дождаться ответа нужного типа (или ошибки). {} — нет связи или не дождались.
+func request(url: String, m: Dictionary, want: String, timeout := 6.0) -> Dictionary:
+	if await connect_to(url) != "":
+		return {}
+	var box := {"r": {}}
+	var on := func(r: Dictionary) -> void:
+		var t := str(r.get("t", ""))
+		if box.r.is_empty() and (t == want or t == "error" or t == "closed"):
+			box.r = r
+	message.connect(on)
+	send(m)
+	var t0 := Time.get_ticks_msec()
+	while box.r.is_empty() and Time.get_ticks_msec() - t0 < timeout * 1000.0:
+		await get_tree().process_frame
+	message.disconnect(on)
+	var r: Dictionary = box.r
+	return r if str(r.get("t", "")) == want else {}
+
+
 func close() -> void:
 	if _ws:
 		var ws := _ws

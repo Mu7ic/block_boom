@@ -18,17 +18,49 @@ func _init() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 
-func burst(pos: Vector2, color: Color, count: int, delay := 0.0) -> void:
+## Частицы из точки (глобально). effect — id из BB.EFFECTS; пусто — выбранный игроком.
+func burst(pos: Vector2, color: Color, count: int, delay := 0.0, effect := "") -> void:
 	if delay > 0.0:
-		get_tree().create_timer(delay).timeout.connect(func(): burst(pos, color, count))
+		get_tree().create_timer(delay).timeout.connect(func(): burst(pos, color, count, 0.0, effect))
 		return
+	var e := effect if effect != "" else Save.effect
 	var k := 1.8
+	if e == "rings":
+		parts.append({"k": e, "p": pos, "v": Vector2.ZERO, "g": 0.0, "s": 6.0, "life": 1.0, "c": color, "rot": 0.0, "vr": 0.0, "fade": 0.035})
+		count = 2
 	for i in count:
-		parts.append({
-			"p": pos, "v": Vector2((randf() - 0.5) * 7.0, -randf() * 6.0 - 1.0) * k,
-			"s": (4.0 + randf() * 6.0) * k, "life": 1.0, "c": color,
-			"rot": randf() * 6.0, "vr": (randf() - 0.5) * 0.4,
-		})
+		var q := {
+			"k": e, "p": pos, "v": Vector2((randf() - 0.5) * 7.0, -randf() * 6.0 - 1.0) * k,
+			"s": (4.0 + randf() * 6.0) * k, "life": 1.0, "c": color, "g": 0.28 * k,
+			"rot": randf() * 6.0, "vr": (randf() - 0.5) * 0.4, "fade": 0.02,
+		}
+		match e:
+			"sparks":
+				# Быстрые яркие штрихи во все стороны
+				var a := randf() * TAU
+				q.v = Vector2(cos(a), sin(a)) * (6.0 + randf() * 7.0) * k * 0.8
+				q.g = 0.12 * k
+				q.c = color.lerp(Color.WHITE, 0.5)
+				q.fade = 0.035
+			"stars":
+				q.s *= 1.4
+				q.c = color.lerp(BB.C_GOLD, 0.45)
+				q.vr *= 0.5
+			"hearts":
+				q.v = Vector2((randf() - 0.5) * 4.0, -randf() * 3.0 - 2.0) * k
+				q.g = -0.04 * k
+				q.s *= 1.5
+				q.c = color.lerp(BB.C_HOT, 0.5)
+				q.fade = 0.016
+			"bubbles":
+				q.v = Vector2((randf() - 0.5) * 3.0, -randf() * 2.5 - 1.5) * k
+				q.g = -0.03 * k
+				q.s *= 1.3
+				q.fade = 0.014
+			"rings":
+				q.s *= 0.6
+				q.fade = 0.03
+		parts.append(q)
 
 
 func ghost_size() -> Vector2:
@@ -41,11 +73,13 @@ func _process(dt: float) -> void:
 	var f := dt * 60.0
 	for p in parts:
 		var v: Vector2 = p.v
-		v.y += 0.28 * 1.8 * f
+		v.y += p.g * f
+		if p.k == "bubbles":
+			v.x += sin(p.life * 14.0 + p.rot) * 0.15 * f
 		p.v = v
 		p.p += v * f
 		p.rot += p.vr * f
-		p.life -= 0.02 * f
+		p.life -= p.fade * f
 	parts = parts.filter(func(p): return p.life > 0.0)
 	queue_redraw()
 
@@ -53,8 +87,7 @@ func _process(dt: float) -> void:
 func _draw() -> void:
 	var inv := get_global_transform().affine_inverse()
 	for p in parts:
-		draw_set_transform(inv * p.p, p.rot, Vector2.ONE)
-		draw_rect(Rect2(-p.s / 2.0, -p.s / 2.0, p.s, p.s), Color(p.c, maxf(p.life, 0.0)))
+		_draw_part(inv, p)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	if ghost != null:
 		var t := Time.get_ticks_msec() / 1000.0
@@ -72,6 +105,44 @@ func _draw() -> void:
 			var half := Vector2.ONE * ghost_cell * 0.5
 			var fr: String = ghost.fruits[k] if ghost.has("fruits") else ""
 			Skins.block(self, pos + half * ghost_scale - half, ghost_cell, ghost.color, ghost_skin, t, v.x * ghost.w + v.y, fr, false, ghost_scale)
+
+
+func _draw_part(inv: Transform2D, p: Dictionary) -> void:
+	var a := maxf(p.life, 0.0)
+	var col := Color(p.c, a)
+	var s: float = p.s
+	match p.k:
+		"sparks":
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			var at: Vector2 = inv * p.p
+			draw_line(at, at - p.v * 2.2, col, maxf(s * 0.35, 2.0), true)
+			draw_circle(at, s * 0.3, Color(1, 1, 1, a))
+		"stars":
+			draw_set_transform(inv * p.p, p.rot, Vector2.ONE)
+			var pts := PackedVector2Array()
+			for k in 10:
+				var r := s * (0.6 if k % 2 == 0 else 0.26)
+				var ang := -PI / 2.0 + k * PI / 5.0
+				pts.append(Vector2(cos(ang), sin(ang)) * r)
+			draw_colored_polygon(pts, col)
+		"hearts":
+			draw_set_transform(inv * p.p, sin(p.rot) * 0.3, Vector2.ONE)
+			draw_colored_polygon(Skins.heart_poly(Vector2.ZERO, s), col)
+		"bubbles":
+			draw_set_transform(inv * p.p, 0.0, Vector2.ONE)
+			draw_circle(Vector2.ZERO, s * 0.5, Color(p.c, a * 0.18))
+			draw_arc(Vector2.ZERO, s * 0.5, 0.0, TAU, 20, Color(p.c.lerp(Color.WHITE, 0.4), a * 0.9), 2.0, true)
+			draw_circle(Vector2(-s * 0.17, -s * 0.17), s * 0.1, Color(1, 1, 1, a * 0.8))
+		"rings":
+			draw_set_transform(inv * p.p, 0.0, Vector2.ONE)
+			if p.v == Vector2.ZERO:
+				var r := (1.0 - a) * 90.0 + 8.0
+				draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(p.c.lerp(Color.WHITE, 0.3), a), 5.0 * a + 1.0, true)
+			else:
+				draw_circle(Vector2.ZERO, s * 0.4, col)
+		_:
+			draw_set_transform(inv * p.p, p.rot, Vector2.ONE)
+			draw_rect(Rect2(-s / 2.0, -s / 2.0, s, s), col)
 
 
 ## Всплывающая надпись над точкой (глобально): крупный текст + мелкая подпись
