@@ -38,6 +38,7 @@ var level_par := 0                    ## ходов на три звезды
 var moves_l: Label
 var daily_rank: Array = []           ## [место, всего] из таблицы дня — для «Поделиться»
 var last_result: Array = [0, 0]       ## счёт последнего боя
+var _t_start := 0.0                   ## когда началась партия — для статистики
 var revive_used := false              ## «второй шанс» — один раз за партию
 var combo_pill: ComboPill
 var emoji_row: HBoxContainer          ## смайлики сопернику в онлайн-бою
@@ -612,6 +613,7 @@ func start_game(m: String, n := 1, resume := false) -> void:
 	moves = 0
 	moves_l = null
 	revive_used = false
+	_t_start = now()
 	main.set_bg([])
 	var resumed := false
 	if mode == "classic":
@@ -893,6 +895,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 
 	if mode == "arcade" and goals.all(func(g): return g.left == 0):
 		finished = true
+		_track_game(true)
 		Missions.add("arcade")
 		Missions.add_xp(Missions.XP_WIN)
 		if Save.unlocked <= level:
@@ -935,6 +938,7 @@ func _after_move(max_delay: float, ev: Dictionary) -> void:
 			later(max_delay + 0.5, func(): stuck_reset(false))
 			return
 		finished = true
+		_track_game(false)
 		if mode == "classic":
 			Save.clear_run()
 		later(max_delay + 0.4, func():
@@ -1252,6 +1256,7 @@ func end_duel() -> void:
 	ov_duel.right.disabled = false
 	ov_duel.right.visible = true
 	finished = true
+	_track_game(score > int(bot.get("score", 0)))
 	bot_status.text = tr("время вышло")
 	var you := score
 	var them: int = bot.score
@@ -1402,6 +1407,7 @@ func end_online(you: int, them: int, note: String, rm := {}) -> void:
 		return
 	stop_duel()
 	finished = true
+	_track_game(note != "" or you > them)
 	main.clear_countdown()
 	bot_status.text = tr("бой окончен")
 	last_result = [you, them]
@@ -1484,6 +1490,11 @@ func on_net(m: Dictionary) -> bool:
 				_show_overlay(ov_duel)
 				return true
 	return false
+
+
+## Сыгранная партия — в обезличенную статистику (режим, счёт, ходы, длительность)
+func _track_game(win: bool) -> void:
+	main.track("game", {"m": mode, "s": score, "n": moves, "t": int(now() - _t_start), "w": win, "lv": level if mode == "arcade" else 0})
 
 
 # ---------- Серия комбо на экране ----------

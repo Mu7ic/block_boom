@@ -5,6 +5,10 @@ extends RefCounted
 
 const N := 8
 const GAME_NAME := "Block Boom"
+## Номер сборки: как version/code в export_presets.cfg и code в site/version.json.
+## Сервер сообщает последнюю — если она больше, в меню появляется «Есть обновление».
+const BUILD := 2
+const DOWNLOAD_URL := "https://kyrbo.com/blockboom/"
 const COLORS := [
 	Color("ff5d5d"), Color("ffa93b"), Color("ffd84d"), Color("4fd67a"),
 	Color("36c3ff"), Color("5d7bff"), Color("b45dff"), Color("ff6fc8"),

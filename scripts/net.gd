@@ -9,6 +9,7 @@ const TIMEOUT := 6.0
 
 var _ws: WebSocketPeer
 var _open := false
+var _connecting := false   ## идёт подключение: второй запрос ждёт его, а не обрывает
 
 
 func is_open() -> bool:
@@ -21,11 +22,22 @@ func connect_to(url: String) -> String:
 		return "nourl"
 	if is_open():
 		return ""
+	if _connecting:
+		while _connecting:
+			await get_tree().process_frame
+		return "" if is_open() else "error"
 	close()
 	var ws := WebSocketPeer.new()
 	if ws.connect_to_url(url.strip_edges()) != OK:
 		return "error"
 	_ws = ws
+	_connecting = true
+	var res: String = await _wait_open(ws)
+	_connecting = false
+	return res
+
+
+func _wait_open(ws: WebSocketPeer) -> String:
 	var t0 := Time.get_ticks_msec()
 	while true:
 		await get_tree().process_frame

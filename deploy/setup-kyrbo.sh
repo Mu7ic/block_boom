@@ -128,5 +128,8 @@ sleep 1
 code=$(curl -s -o /dev/null -w '%{http_code}' --http1.1 -H "Connection: Upgrade" -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" -m 5 "https://$DOMAIN/ws" || true)
 page=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "https://$DOMAIN/blockboom/" || true)
+sleep 2   # сервер сохраняет ключ статистики через секунду после первого запуска
+skey=$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).statsKey||"")}catch(e){}' "$DIR/server/data.json" || true)
+[ -n "$skey" ] && echo "Статистика (ссылка только для вас): https://$DOMAIN/blockboom/stats?key=$skey"
 echo "Страница https://$DOMAIN/blockboom/ — ответ $page"
 if [ "$code" = "101" ] && [ "$page" = "200" ]; then echo "ГОТОВО: wss://$DOMAIN/ws и https://$DOMAIN/blockboom/ работают"; else echo "Ответ $code — смотрите: journalctl -u blockboom -n 50; docker logs ${CADDY_CT:-caddy} --tail 50"; fi

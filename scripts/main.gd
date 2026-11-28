@@ -31,6 +31,8 @@ var login_root: Control
 var login_grid: GridContainer
 var login_btn: Button
 var season_l: Label
+var upd_btn: Button             ## «Есть обновление» — когда сервер знает сборку новее
+var _ev_busy := false
 var season := {}                ## {id, left} с сервера: текущий сезон и секунд до конца
 var _season_t := 0.0
 var mis_dot: Control
@@ -240,6 +242,7 @@ func _build_splash() -> void:
 		Audio.sfx("boom")
 		Audio.buzz(40)
 		show_screen("menu")
+		track("open")
 		# При запуске тихо отправляем результат вызова дня, сыгранного без сети
 		if not Save.daily_pending.is_empty():
 			get_tree().create_timer(2.0).timeout.connect(flush_daily)
@@ -265,6 +268,14 @@ func _build_menu() -> void:
 	lvl_bar.add_theme_stylebox_override("background", UI.box(Color(1, 1, 1, 0.16), 8))
 	lvl_bar.add_theme_stylebox_override("fill", UI.box(BB.C_GOLD, 8))
 	lv.add_child(lvl_bar)
+	upd_btn = UI.button("⬆ Есть обновление — скачать", BB.C_GREEN, BB.C_INK, 24, Vector2(0, 56))
+	_pad(upd_btn, 26)
+	upd_btn.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	upd_btn.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	upd_btn.position.y = 96
+	upd_btn.visible = false
+	upd_btn.pressed.connect(func(): OS.shell_open(BB.DOWNLOAD_URL))
+	s.add_child(upd_btn)
 	var v := UI.center_box(s, 22)
 	menu_logo = Widgets.Logo.new(72)
 	v.add_child(UI.centered(menu_logo))
@@ -368,6 +379,7 @@ func update_menu() -> void:
 	mis_btn.text = tr("🎯 Задания %d/3") % Missions.done_count()
 	lang_btn.text = I18N.current().to_upper()
 	mis_dot.visible = Missions.chest_ready()
+	upd_btn.visible = int(Save.get_v("latest", 0)) > BB.BUILD
 	var li := Missions.level_info()
 	lvl_l.text = tr("⭐ Ур. %d") % li.level
 	lvl_bar.max_value = li.need
@@ -1031,8 +1043,47 @@ func refresh_profile() -> void:
 	Save.rating = int(r.get("rating", Save.rating))
 	Save.rated_games = int(r.get("games", Save.rated_games))
 	_season_from(r)
+	_latest_from(r)
 	if current == "online":
 		update_rating_label()
+
+
+# ---------- Статистика и обновления ----------
+## Обезличенное событие (запуск, сыгранная партия). Копится на телефоне и уходит, когда есть сеть.
+func track(k: String, d := {}) -> void:
+	d.k = k
+	d.d = BB.today()
+	var q: Array = Save.get_v("ev_q", [])
+	q.append(d)
+	if q.size() > 60:
+		q = q.slice(q.size() - 60)
+	Save.set_v("ev_q", q)
+	flush_events()
+
+
+func flush_events() -> void:
+	var q: Array = Save.get_v("ev_q", [])
+	if _ev_busy or q.is_empty():
+		return
+	_ev_busy = true
+	var n := q.size()
+	var r: Dictionary = await Net.request(Save.server, {"t": "ev", "id": Save.player_id, "ver": BB.BUILD,
+		"plat": OS.get_name(), "lang": I18N.current(), "list": q}, "evAck", 5.0)
+	_ev_busy = false
+	if r.is_empty():
+		return
+	var cur: Array = Save.get_v("ev_q", [])
+	Save.set_v("ev_q", cur.slice(n))
+	_latest_from(r)
+
+
+## Сервер знает сборку новее нашей — показываем кнопку обновления в меню
+func _latest_from(r: Dictionary) -> void:
+	var latest := int(r.get("latest", 0))
+	if latest > 0 and latest != int(Save.get_v("latest", 0)):
+		Save.set_v("latest", latest)
+		if current == "menu":
+			upd_btn.visible = latest > BB.BUILD
 
 
 ## Сезон из ответа сервера; если прошлый сезон закончился — награда по лиге
@@ -1122,7 +1173,7 @@ func _on_net(m: Dictionary) -> void:
 			lobby_view("search")
 			set_lobby_status("")
 			return
-		"profile", "dailyTop", "topList":
+		"profile", "dailyTop", "topList", "evAck":
 			return   # ответы на запросы (Net.request)
 		"error":
 			if current == "online":

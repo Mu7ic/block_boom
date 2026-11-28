@@ -408,6 +408,22 @@ func _run() -> void:
 	g.leave_game()
 	main.show_screen("menu")
 
+	# Статистика и обновления: события копятся без сети, номер сборки везде один
+	var evq: Array = Save.get_v("ev_q", [])
+	check(evq.any(func(e): return e.get("k") == "game" and e.get("m") == "classic"), "stats: finished games are queued (%d events)" % evq.size())
+	var presets := FileAccess.get_file_as_string("res://export_presets.cfg")
+	var vj: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://site/version.json"))
+	check(presets.contains("version/code=%d
+" % BB.BUILD) and int(vj.code) == BB.BUILD, "version: BUILD, export preset and site/version.json match (%d)" % BB.BUILD)
+	Save.set_v("latest", BB.BUILD + 1)
+	main.show_screen("menu")
+	await wait(0.5)
+	check(main.upd_btn.visible, "update: button shown when the server has a newer build")
+	await shot("36_update")
+	Save.set_v("latest", BB.BUILD)
+	main.update_menu()
+	check(not main.upd_btn.visible, "update: hidden on the latest build")
+
 	# Лучшие игроки (без сервера — сообщение о связи)
 	main.open_top()
 	await wait(13.0)   # подключение до 6 с + ответ до 5 с

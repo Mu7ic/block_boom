@@ -11,6 +11,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.PORT) || 8765;
@@ -29,8 +30,8 @@ const DAILY_TOP = 10;
 // ---------- Хранилище: профили (рейтинг) и таблицы дня ----------
 // Игрок опознаётся по случайному токену, который клиент создаёт сам и хранит у себя.
 // Токен никому не показывается: в таблицах только имена и очки.
-let db = { players: {}, daily: {} };
-try { db = { players: {}, daily: {}, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }; } catch (e) { /* первый запуск */ }
+let db = { players: {}, daily: {}, act: {}, stats: {} };
+try { db = { players: {}, daily: {}, act: {}, stats: {}, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }; } catch (e) { /* первый запуск */ }
 let saveTimer = null;
 function saveDb() {
   if (saveTimer) return;
@@ -53,7 +54,7 @@ function profile(id, name) {
   return p;
 }
 const publicProfile = p => ({
-  t: 'profile', rating: p.rating, games: p.games, wins: p.wins,
+  t: 'profile', rating: p.rating, games: p.games, wins: p.wins, latest: LATEST.code,
   season: { id: seasonId(), left: Math.max(0, Math.round((seasonEnd() - Date.now()) / 1000)) },
   reward: p.reward || null,
 });
@@ -142,6 +143,75 @@ const server = http.createServer((req, res) => {
   });
 });
 
+// ---------- Версия игры: клиент старее LATEST.code показывает «Есть обновление» ----------
+let LATEST = { code: 0, name: '' };
+try { LATEST = { ...LATEST, ...JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'site', 'version.json'), 'utf8')) }; } catch (e) { /* нет файла — подсказки не будет */ }
+
+// ---------- Статистика: обезличенные события игры ----------
+// db.act[id]   = { f: первый день, d: [дни, когда игрок заходил], v: версия, p: платформа }
+// db.stats[day] = { opens, games: { режим: число }, secs: секунд в партиях, cs: сумма очков «Классики» }
+// Личных данных нет: только случайный токен игрока и счётчики.
+const STATS_KEEP = 90;
+const STATS_KEY = process.env.STATS_KEY || db.statsKey || (db.statsKey = crypto.randomBytes(12).toString('hex'));
+const MODES = ['classic', 'daily', 'arcade', 'duel', 'online'];
+function trackEvents(m) {
+  const today = dayStr(), minDay = dayStr(Date.now() - 7 * 86400000);
+  const a = db.act[m.id] || (db.act[m.id] = { f: today, d: [] });
+  for (const e of m.list.slice(0, 60)) {
+    if (!e || typeof e !== 'object') continue;
+    // События, накопленные без сети, приходят со своей датой (не старше недели)
+    const day = typeof e.d === 'string' && /^\d{4}-\d\d-\d\d$/.test(e.d) && e.d <= today && e.d >= minDay ? e.d : today;
+    if (day < a.f) a.f = day;
+    if (!a.d.includes(day)) { a.d.push(day); a.d.sort(); if (a.d.length > 40) a.d.shift(); }
+    const s = db.stats[day] || (db.stats[day] = { opens: 0, games: {}, secs: 0, cs: 0 });
+    if (e.k === 'open') s.opens++;
+    else if (e.k === 'game') {
+      const mode = MODES.includes(e.m) ? e.m : 'other';
+      s.games[mode] = (s.games[mode] || 0) + 1;
+      s.secs += Math.min(3600, Math.max(0, Number(e.t) || 0));
+      if (mode === 'classic') s.cs = (s.cs || 0) + Math.min(1e7, Math.max(0, Number(e.s) || 0));
+    }
+  }
+  a.v = Math.floor(Number(m.ver)) || 0;
+  a.p = String(m.plat || '').replace(/[^A-Za-z]/g, '').slice(0, 12);
+  const days = Object.keys(db.stats).sort();
+  while (days.length > STATS_KEEP) delete db.stats[days.shift()];
+  saveDb();
+}
+
+function statsPage() {
+  const acts = Object.values(db.act);
+  const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '—';
+  const rows = [];
+  for (let k = 0; k < 21; k++) {
+    const day = dayStr(Date.now() - k * 86400000);
+    const s = db.stats[day] || { opens: 0, games: {}, secs: 0, cs: 0 };
+    const dau = acts.filter(a => a.d.includes(day)).length;
+    const fresh = acts.filter(a => a.f === day);
+    const back = n => {
+      const d2 = dayStr(new Date(day + 'T00:00:00Z').getTime() + n * 86400000);
+      return d2 > dayStr() ? '…' : pct(fresh.filter(a => a.d.includes(d2)).length, fresh.length);
+    };
+    const games = Object.values(s.games).reduce((x, y) => x + y, 0);
+    rows.push(`<tr><td>${day}</td><td>${dau}</td><td>${fresh.length}</td><td>${back(1)}</td><td>${back(7)}</td><td>${s.opens}</td><td>${games}</td>` +
+      `<td>${dau ? (games / dau).toFixed(1) : '—'}</td><td>${games ? (s.secs / games / 60).toFixed(1) : '—'}</td>` +
+      MODES.map(mo => `<td>${s.games[mo] || 0}</td>`).join('') +
+      `<td>${s.games.classic ? Math.round((s.cs || 0) / s.games.classic) : '—'}</td></tr>`);
+  }
+  const vers = {};
+  for (const a of acts) vers[`${a.p || '?'} v${a.v || '?'}`] = (vers[`${a.p || '?'} v${a.v || '?'}`] || 0) + 1;
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Block Boom — статистика</title>
+<style>body{margin:0;padding:24px;background:#161a3a;color:#fff;font:15px system-ui,sans-serif}h1{margin:0 0 6px}p{opacity:.7;margin:4px 0 18px}
+.wrap{overflow-x:auto}table{border-collapse:collapse;min-width:900px}th,td{padding:8px 12px;text-align:right;border-bottom:1px solid rgba(255,255,255,.1);white-space:nowrap}
+th{font-size:13px;opacity:.7;font-weight:600}td:first-child,th:first-child{text-align:left}tr:hover td{background:rgba(255,255,255,.05)}</style></head><body>
+<h1>Block Boom — статистика</h1>
+<p>Всего игроков: ${acts.length} · сейчас на сервере: ${wss.clients.size} · последняя версия: ${LATEST.name} (${LATEST.code}) · установки: ${Object.entries(vers).map(([k, v]) => `${k} — ${v}`).join(', ') || '—'}</p>
+<p>Дни по UTC. «Вернулись» — доля новых игроков этого дня, зашедших через 1 и 7 дней («…» — этот день ещё не наступил или не закончился).</p>
+<div class="wrap"><table><tr><th>День</th><th>Игроков</th><th>Новых</th><th>Вернулись D1</th><th>Вернулись D7</th><th>Запусков</th><th>Партий</th><th>Партий на игрока</th><th>Минут на партию</th>
+<th>Классика</th><th>Вызов дня</th><th>Аркада</th><th>Бот</th><th>Онлайн</th><th>Средний счёт Классики</th></tr>${rows.join('')}</table></div></body></html>`;
+}
+
 // ---------- Страница игры: /blockboom ----------
 // /blockboom/            — страница со скачиванием (site/index.html)
 // /blockboom/img/…       — картинки страницы
@@ -165,6 +235,14 @@ function sendFile(res, file, type, extra = {}) {
 }
 
 function serveSite(url, req, res) {
+  if (url === '/blockboom/stats') {
+    // Статистика — только по секретной ссылке (ключ печатает deploy/setup-kyrbo.sh)
+    const key = new URL(req.url, 'http://x').searchParams.get('key') || '';
+    const ok = key.length === STATS_KEY.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(STATS_KEY));
+    res.writeHead(ok ? 200 : 404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(ok ? statsPage() : 'Не найдено');
+    return;
+  }
   if (url === '/blockboom' || url === '/blockboom/play') {
     res.writeHead(301, { Location: url + '/' });
     res.end();
@@ -386,6 +464,13 @@ wss.on('connection', ws => {
         send(other(room, ws), { ...m, t: 'opp', score });
         break;
       }
+      case 'ev': {
+        // Обезличенные события игры (запуск, сыгранная партия) — для статистики
+        if (!validId(m.id) || !Array.isArray(m.list)) return;
+        trackEvents(m);
+        send(ws, { t: 'evAck', latest: LATEST.code });
+        break;
+      }
       case 'emoji': {
         // Реакция сопернику: номер смайлика, не чаще раза в секунду
         const e = Math.floor(Number(m.e));
@@ -427,6 +512,7 @@ setInterval(() => {
   }
 }, 25000);
 
+if (!process.env.STATS_KEY) saveDb();   // ключ статистики создан при первом запуске — сохраняем
 server.listen(PORT, HOST, () => {
   console.log(`Block Boom сервер: http://localhost:${PORT}  (WebSocket: /ws)`);
 });

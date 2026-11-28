@@ -81,6 +81,7 @@ const EN := {
 	"Комбо ×%d": "Combo ×%d",
 	"💖 Второй шанс": "💖 Second chance",
 	"⭐ Ур. %d": "⭐ Lv. %d",
+	"⬆ Есть обновление — скачать": "⬆ Update available — download",
 	"⭐ Уровень %d! +🔑": "⭐ Level %d! +🔑",
 	"Награда за вход 🎁": "Daily reward 🎁",
 	"Заходи каждый день — на 7-й день целый сундук": "Come back every day — day 7 fills a whole chest",
