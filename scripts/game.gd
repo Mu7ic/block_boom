@@ -6,6 +6,7 @@ const N := 8
 const DUEL_TIME := 180                 ## секунд
 const BOT_THINK := Vector2(1.7, 3.2)   ## пауза бота между ходами, с
 const BOT_MISTAKE := 0.15              ## шанс, что бот сходит не лучшим образом
+const EMOJI := ["👍", "😂", "😮", "😎", "😭"]   ## реакции в онлайн-бою (на сервер уходит номер)
 
 var main: Node   ## Main (экраны, подсказки, отсчёт)
 var fx: FxLayer
@@ -39,6 +40,8 @@ var daily_rank: Array = []           ## [место, всего] из табли
 var last_result: Array = [0, 0]       ## счёт последнего боя
 var revive_used := false              ## «второй шанс» — один раз за партию
 var combo_pill: ComboPill
+var emoji_row: HBoxContainer          ## смайлики сопернику в онлайн-бою
+var _emoji_t := 0.0
 var rec_bar: ProgressBar              ## полоска «до рекорда» под рекордом
 var _tok := 0
 var _bot_tok := 0
@@ -119,6 +122,15 @@ func _ready() -> void:
 	ov_lose.box.move_child(ov_lose.revive, ov_lose.row.get_index())
 	combo_pill = ComboPill.new()
 	add_child(combo_pill)
+	emoji_row = HBoxContainer.new()
+	emoji_row.add_theme_constant_override("separation", 14)
+	emoji_row.visible = false
+	add_child(emoji_row)
+	for k in EMOJI.size():
+		var eb := UI.button(EMOJI[k], Color(1, 1, 1, 0.12), Color.WHITE, 38, Vector2(84, 84))
+		eb.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		eb.pressed.connect(send_emoji.bind(k))
+		emoji_row.add_child(eb)
 	ov_win = _overlay("Уровень пройден! 🎉", "К уровням", "Следующий →")
 	ov_win.left.pressed.connect(func(): main.open_levels())
 	ov_win.right.pressed.connect(func(): start_game("arcade", level + 1))
@@ -554,7 +566,7 @@ func _layout() -> void:
 	var W := size.x
 	var H := size.y
 	var dueling := mode == "duel" or mode == "online"
-	var cell := minf(74.0, minf((W - 56.0) / 8.0 - 6.0, (H - (567.0 if dueling else 342.0 + _combo_room())) / 11.4))
+	var cell := minf(74.0, minf((W - 56.0) / 8.0 - 6.0, (H - ((567.0 + (70.0 if mode == "online" else 0.0)) if dueling else 342.0 + _combo_room())) / 11.4))
 	cell = floorf(cell)
 	board_view.set_metrics(cell, 5, 14)
 	tray.custom_minimum_size = Vector2(cell * 8 + 54, cell * 3.4)
@@ -568,6 +580,9 @@ func _layout() -> void:
 	fx.ghost_gap = 5
 	corner_r.reset_size()
 	corner_r.position = Vector2(W - corner_r.size.x - 22, 22)
+	emoji_row.visible = mode == "online"
+	emoji_row.reset_size()
+	emoji_row.position = Vector2((W - emoji_row.size.x) * 0.5, H - emoji_row.size.y - 36)
 
 
 # ---------- Начало игры ----------
@@ -782,6 +797,8 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 		moves_l.text = "%d/%d" % [moves, level_par]
 		moves_l.add_theme_color_override("font_color", Color.WHITE if moves <= level_par else Color(1, 1, 1, 0.6))
 
+	Missions.add_xp(Missions.XP_PIECE + n * Missions.XP_LINE)
+
 	# Задания дня
 	Missions.add("pieces")
 	if n > 0:
@@ -877,6 +894,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 	if mode == "arcade" and goals.all(func(g): return g.left == 0):
 		finished = true
 		Missions.add("arcade")
+		Missions.add_xp(Missions.XP_WIN)
 		if Save.unlocked <= level:
 			Save.unlocked = level + 1
 		var st := BB.level_stars(moves, level_par)
@@ -1234,6 +1252,7 @@ func end_duel() -> void:
 	ov_duel.title.text = tr("Ты победил! 🏆") if you > them else (tr("Бот победил 🤖") if you < them else tr("Ничья 🤝"))
 	if you > them:
 		Missions.add("win")
+		Missions.add_xp(Missions.XP_WIN)
 	_set_text(ov_duel, tr("Ты [b]%d[/b] : [b]%d[/b] Бот") % [you, them])
 	later(0.5, func():
 		_show_overlay(ov_duel)
@@ -1261,6 +1280,16 @@ func _on_rematch() -> void:
 
 
 # ---------- Онлайн-бой ----------
+## Реакция сопернику: не чаще раза в секунду
+func send_emoji(k: int) -> void:
+	if mode != "online" or now() - _emoji_t < 1.0:
+		return
+	_emoji_t = now()
+	Net.send({"t": "emoji", "e": k})
+	fx.pop(emoji_row.get_child(k).get_global_rect().get_center() - Vector2(0, 60), EMOJI[k], 0.0, 80)
+	Audio.sfx("click")
+
+
 func send_state(ev := {}) -> void:
 	if mode != "online" or duel.is_empty():
 		return
@@ -1378,6 +1407,7 @@ func end_online(you: int, them: int, note: String, rm := {}) -> void:
 	_rating_result(rm)
 	if note != "" or you > them:
 		Missions.add("win")
+		Missions.add_xp(Missions.XP_WIN)
 	ov_duel.right.disabled = note != ""
 	ov_duel.right.visible = note == ""
 	later(0.4, func():
@@ -1416,6 +1446,12 @@ func on_net(m: Dictionary) -> bool:
 			return true
 		"opp":
 			apply_opp(m)
+			return true
+		"emoji":
+			var k := int(m.get("e", -1))
+			if mode == "online" and k >= 0 and k < EMOJI.size():
+				fx.pop(bot_panel.get_global_rect().get_center(), EMOJI[k], 0.0, 110)
+				Audio.sfx("click")
 			return true
 		"oppRematch":
 			if ov_duel.root.visible:

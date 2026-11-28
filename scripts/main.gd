@@ -25,6 +25,14 @@ var top_list: VBoxContainer
 var top_me: Label
 var theme_grid: GridContainer
 var mis_btn: Button
+var lvl_l: Label
+var lvl_bar: ProgressBar
+var login_root: Control
+var login_grid: GridContainer
+var login_btn: Button
+var season_l: Label
+var season := {}                ## {id, left} с сервера: текущий сезон и секунд до конца
+var _season_t := 0.0
 var mis_dot: Control
 # задания
 var mis_box: VBoxContainer
@@ -109,6 +117,10 @@ func _ready() -> void:
 	Missions.done.connect(func(txt: String):
 		toast(tr("🎯 Задание выполнено! +🔑") + "\n" + txt)
 		Audio.sfx("record"))
+	Missions.level_up.connect(func(lvl: int):
+		toast(tr("⭐ Уровень %d! +🔑") % lvl)
+		Audio.sfx("record"))
+	_build_login()
 	show_screen("splash")
 
 
@@ -183,6 +195,9 @@ func show_screen(id: String) -> void:
 		game.leave_game()
 	if id == "menu":
 		update_menu()
+		# Награда за вход — раз в день, когда открывается меню (обучение показываем раньше)
+		if Missions.login_state().can and Save.get_v("tut", false) and not "--test-save" in OS.get_cmdline_user_args():
+			open_login()
 
 
 func _back_button(parent: Control, cb: Callable) -> Button:
@@ -232,6 +247,21 @@ func _build_splash() -> void:
 # ---------- Меню ----------
 func _build_menu() -> void:
 	var s := _screen("menu")
+	# Уровень игрока — сверху по центру
+	var lv := UI.hrow(s, 16)
+	lv.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	lv.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	lv.position.y = 44
+	lv.alignment = BoxContainer.ALIGNMENT_CENTER
+	lvl_l = UI.label("", 30, BB.C_GOLD, UI.F_BLACK)
+	lv.add_child(lvl_l)
+	lvl_bar = ProgressBar.new()
+	lvl_bar.show_percentage = false
+	lvl_bar.custom_minimum_size = Vector2(260, 16)
+	lvl_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	lvl_bar.add_theme_stylebox_override("background", UI.box(Color(1, 1, 1, 0.16), 8))
+	lvl_bar.add_theme_stylebox_override("fill", UI.box(BB.C_GOLD, 8))
+	lv.add_child(lvl_bar)
 	var v := UI.center_box(s, 22)
 	menu_logo = Widgets.Logo.new(72)
 	v.add_child(UI.centered(menu_logo))
@@ -335,6 +365,10 @@ func update_menu() -> void:
 	mis_btn.text = tr("🎯 Задания %d/3") % Missions.done_count()
 	lang_btn.text = I18N.current().to_upper()
 	mis_dot.visible = Missions.chest_ready()
+	var li := Missions.level_info()
+	lvl_l.text = tr("⭐ Ур. %d") % li.level
+	lvl_bar.max_value = li.need
+	lvl_bar.value = li.cur
 	await get_tree().process_frame
 	coll_dot.position = Vector2(coll_btn.size.x - 24, 6)
 	mis_dot.position = Vector2(mis_btn.size.x - 24, 6)
@@ -729,6 +763,78 @@ func open_chest() -> void:
 	_update_chest()
 
 
+# ---------- Награда за вход ----------
+func _build_login() -> void:
+	login_root = Control.new()
+	login_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	login_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	login_root.visible = false
+	login_root.z_index = 25
+	add_child(login_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.04, 0.05, 0.12, 0.82)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	login_root.add_child(dim)
+	var v := UI.center_box(login_root, 24)
+	v.add_child(UI.label("Награда за вход 🎁", 50, Color.WHITE, UI.F_BLACK))
+	v.add_child(UI.label("Заходи каждый день — на 7-й день целый сундук", 25, Color(1, 1, 1, 0.6), UI.F_REG))
+	login_grid = GridContainer.new()
+	login_grid.columns = 4
+	login_grid.add_theme_constant_override("h_separation", 14)
+	login_grid.add_theme_constant_override("v_separation", 14)
+	v.add_child(UI.centered(login_grid))
+	login_btn = UI.big_button("Забрать", "", BB.C_GOLD)
+	login_btn.pressed.connect(claim_login)
+	v.add_child(UI.centered(login_btn))
+
+
+func open_login() -> void:
+	var st := Missions.login_state()
+	for ch in login_grid.get_children():
+		ch.queue_free()
+	for d in Missions.LOGIN_REWARDS.size():
+		var today: bool = d == st.n and st.can
+		var got: bool = d < st.n or (d == st.n and not st.can)
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(146, 146)
+		var bg := Color(0.31, 0.84, 0.48, 0.35) if got else (Color(BB.C_GOLD, 0.9) if today else Color(1, 1, 1, 0.1))
+		card.add_theme_stylebox_override("panel", UI.box(bg, 26, Vector4(8, 12, 8, 12)))
+		login_grid.add_child(card)
+		var cv := VBoxContainer.new()
+		cv.alignment = BoxContainer.ALIGNMENT_CENTER
+		cv.add_theme_constant_override("separation", 2)
+		card.add_child(cv)
+		var ink := BB.C_INK if today else Color.WHITE
+		var dl := UI.label(tr("День %d") % (d + 1), 22, Color(ink, 0.75), UI.F_BOLD)
+		dl.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		cv.add_child(dl)
+		var last: bool = d == Missions.LOGIN_REWARDS.size() - 1
+		var rl := UI.label("✓" if got else ("🎁" if last else "🔑"), 46, ink, UI.F_BLACK)
+		rl.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		cv.add_child(rl)
+		var kl := UI.label("×%d" % Missions.LOGIN_REWARDS[d], 24, ink, UI.F_BLACK)
+		kl.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		cv.add_child(kl)
+	login_root.visible = true
+	login_root.modulate.a = 0.0
+	login_root.create_tween().tween_property(login_root, "modulate:a", 1.0, 0.25)
+
+
+func claim_login() -> void:
+	var k := Missions.claim_login()
+	login_root.visible = false
+	if k <= 0:
+		return
+	var c := size * Vector2(0.5, 0.45)
+	for i in 8:
+		fx.burst(c, BB.COLORS[i], 6, i * 0.04, "confetti")
+	Audio.sfx("skin")
+	Audio.buzz([30, 40, 80])
+	toast(tr("Награда за вход: 🔑×%d") % k + ("\n" + tr("Сундук готов — открой его в заданиях!") if Missions.chest_ready() else ""))
+	update_menu()
+
+
 # ---------- Онлайн-лобби ----------
 func _build_online() -> void:
 	var s := _screen("online")
@@ -748,6 +854,9 @@ func _build_online() -> void:
 	v.add_child(lobby_main)
 	rating_l = UI.label("", 30, Color.WHITE, UI.F_BLACK)
 	lobby_main.add_child(rating_l)
+	season_l = UI.label("", 23, Color(1, 1, 1, 0.6), UI.F_REG)
+	season_l.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	lobby_main.add_child(season_l)
 	var quick := UI.big_button("⚡ Быстрый бой", "соперник по рейтингу", BB.C_YELLOW)
 	quick.pressed.connect(quick_match)
 	lobby_main.add_child(UI.centered(quick))
@@ -887,6 +996,12 @@ func update_rating_label() -> void:
 	var l := BB.league(Save.rating)
 	rating_l.text = BB.league_text(Save.rating) + ("" if g == 0 else tr("  ·  боёв: %d") % g)
 	rating_l.add_theme_color_override("font_color", l[3])
+	# Сезон: сколько осталось и награда за текущую лигу
+	if season.is_empty():
+		season_l.text = ""
+	else:
+		var left := maxi(0, int(season.left) - int(now() - _season_t))
+		season_l.text = tr("Сезон: ещё %d д. %d ч  ·  награда за лигу: 🔑×%d") % [left / 86400, left % 86400 / 3600, BB.season_keys(Save.rating)]
 
 
 ## Рейтинг с сервера (тихо, без сообщений об ошибке)
@@ -896,8 +1011,26 @@ func refresh_profile() -> void:
 		return
 	Save.rating = int(r.get("rating", Save.rating))
 	Save.rated_games = int(r.get("games", Save.rated_games))
+	_season_from(r)
 	if current == "online":
 		update_rating_label()
+
+
+## Сезон из ответа сервера; если прошлый сезон закончился — награда по лиге
+func _season_from(r: Dictionary) -> void:
+	if r.get("season") is Dictionary:
+		season = r.season
+		_season_t = now()
+	var rw = r.get("reward")
+	if rw is Dictionary and str(rw.get("season", "")) != "":
+		Net.send({"t": "rewardAck", "season": rw.season})
+		if Save.get_v("season_rewarded", "") != str(rw.season):
+			Save.set_v("season_rewarded", str(rw.season))
+			var k := clampi(int(rw.get("keys", 0)), 0, 10)
+			Missions.keys += k
+			toast(tr("🏆 Сезон завершён!\nТвоя лига: %s\nНаграда: 🔑×%d") % [BB.league_text(int(rw.get("rating", 1000))), k])
+			Audio.sfx("record")
+			update_menu()
 
 
 func quick_match() -> void:
@@ -965,6 +1098,7 @@ func _on_net(m: Dictionary) -> void:
 		"queued":
 			Save.rating = int(m.get("rating", Save.rating))
 			Save.rated_games = int(m.get("games", Save.rated_games))
+			_season_from(m)
 			update_rating_label()
 			lobby_view("search")
 			set_lobby_status("")

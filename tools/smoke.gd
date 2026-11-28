@@ -366,6 +366,30 @@ func _run() -> void:
 	g.leave_game()
 	main.show_screen("menu")
 
+	# Награда за вход, уровень игрока, смайлики
+	var keys0 := Missions.keys
+	check(Missions.login_state().can, "login: reward available on a new day")
+	main.open_login()
+	await wait(0.5)
+	check(main.login_root.visible and main.login_grid.get_child_count() == 7, "login: calendar with 7 days")
+	await shot("33_login")
+	main.claim_login()
+	await wait(0.4)
+	check(Missions.keys == keys0 + Missions.LOGIN_REWARDS[0] and not Missions.login_state().can, "login: keys granted once a day")
+	check(Missions.claim_login() == 0, "login: no second claim")
+	var lv0: int = Missions.level_info().level
+	keys0 = Missions.keys
+	Missions.add_xp(Missions.xp_need(lv0))
+	check(Missions.level_info().level == lv0 + 1 and Missions.keys == keys0 + 1, "level: xp raises level and gives a key")
+	main.show_screen("menu")
+	await wait(0.5)
+	check(main.lvl_l.text.contains(str(lv0 + 1)), "level: shown in menu (%s)" % main.lvl_l.text)
+	await shot("34_menu_level")
+	main.season = {"id": "2026-11-23", "left": 200000}
+	main.update_rating_label()
+	check(main.season_l.text != "", "season: lobby line (%s)" % main.season_l.text)
+	check(g.on_net({"t": "emoji", "e": 1}), "emoji: message handled")
+
 	# Лучшие игроки (без сервера — сообщение о связи)
 	main.open_top()
 	await wait(13.0)   # подключение до 6 с + ответ до 5 с

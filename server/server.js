@@ -49,12 +49,42 @@ function profile(id, name) {
   let p = db.players[id];
   if (!p) { p = db.players[id] = { name: 'Игрок', rating: START_RATING, games: 0, wins: 0 }; saveDb(); }
   if (name && p.name !== name) { p.name = name; saveDb(); }
+  rollSeason(p);
   return p;
 }
-const publicProfile = p => ({ t: 'profile', rating: p.rating, games: p.games, wins: p.wins });
+const publicProfile = p => ({
+  t: 'profile', rating: p.rating, games: p.games, wins: p.wins,
+  season: { id: seasonId(), left: Math.max(0, Math.round((seasonEnd() - Date.now()) / 1000)) },
+  reward: p.reward || null,
+});
+
+// ---------- Сезоны: неделя с понедельника (UTC) ----------
+// В конце сезона игрок, сыгравший хотя бы один рейтинговый бой, получает ключи по лиге,
+// а рейтинг наполовину возвращается к стартовому — чтобы каждую неделю было за что бороться.
+const SEASON_KEYS = [[1600, 6], [1400, 4], [1250, 3], [1100, 2], [0, 1]];
+function seasonStart(ms = Date.now()) {
+  const d = new Date(ms);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+}
+const seasonEnd = (ms = Date.now()) => seasonStart(ms) + 7 * 86400000;
+const seasonId = (ms = Date.now()) => new Date(seasonStart(ms)).toISOString().slice(0, 10);
+function rollSeason(p) {
+  const cur = seasonId();
+  if (p.season === cur) return;
+  if (p.season && p.seasonGames > 0) {
+    p.reward = { season: p.season, rating: p.rating, keys: SEASON_KEYS.find(([r]) => p.rating >= r)[1] };
+    p.rating = Math.round(START_RATING + (p.rating - START_RATING) * 0.5);
+  }
+  p.season = cur;
+  p.seasonGames = 0;
+  saveDb();
+}
 
 // Рейтинг Эло: новичкам (меньше 10 боёв) рейтинг меняется быстрее
 function rate(pa, pb, result) {   // result: 1 — победил a, 0 — b, 0.5 — ничья
+  rollSeason(pa); rollSeason(pb);
+  pa.seasonGames = (pa.seasonGames || 0) + 1;
+  pb.seasonGames = (pb.seasonGames || 0) + 1;
   const ea = 1 / (1 + Math.pow(10, (pb.rating - pa.rating) / 400));
   const ka = pa.games < 10 ? 40 : 24, kb = pb.games < 10 ? 40 : 24;
   const da = Math.round(ka * (result - ea));
@@ -356,6 +386,20 @@ wss.on('connection', ws => {
         send(other(room, ws), { ...m, t: 'opp', score });
         break;
       }
+      case 'emoji': {
+        // Реакция сопернику: номер смайлика, не чаще раза в секунду
+        const e = Math.floor(Number(m.e));
+        if (!room || !(e >= 0 && e < 16) || Date.now() - (ws.emojiAt || 0) < 900) return;
+        ws.emojiAt = Date.now();
+        send(other(room, ws), { t: 'emoji', e });
+        break;
+      }
+      case 'rewardAck': {
+        // Клиент получил награду за сезон — больше не присылаем
+        const p = db.players[ws.pid];
+        if (p && p.reward && p.reward.season === m.season) { delete p.reward; saveDb(); }
+        break;
+      }
       case 'rematch': {
         if (!room || room.state !== 'ended' || room.players.length < 2) return;
         room.ready.add(ws);
@@ -384,5 +428,5 @@ setInterval(() => {
 }, 25000);
 
 server.listen(PORT, HOST, () => {
-  console.log(`Блок Бум! сервер: http://localhost:${PORT}  (WebSocket: /ws)`);
+  console.log(`Block Boom сервер: http://localhost:${PORT}  (WebSocket: /ws)`);
 });

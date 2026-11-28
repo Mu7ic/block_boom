@@ -1938,6 +1938,11 @@ function onNet(m) {
     case 'opp':
       applyOpp(m);
       break;
+    case 'emoji': {
+      const em = ['👍', '😂', '😮', '😎', '😭'][m.e | 0];
+      if (em) botFloat(em);
+      break;
+    }
     case 'oppRematch':
       if ($('overDuel').style.display === 'flex')
         $('duelText').insertAdjacentHTML('beforeend', `<br><small>${oppName.replace(/[<>&]/g, '')} хочет реванш!</small>`);

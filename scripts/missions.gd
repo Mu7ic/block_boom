@@ -128,3 +128,57 @@ func open_chest() -> Dictionary:
 		"theme":
 			Save.add_theme(r.id)
 	return r
+
+
+# ---------- Награда за вход: 7 дней по кругу ----------
+## Ключей за каждый день; на седьмой — целый сундук
+const LOGIN_REWARDS := [1, 1, 2, 1, 2, 2, 3]
+
+
+## {n: номер дня 0…6, который сейчас можно забрать, can: не забрана ли награда сегодня}
+func login_state() -> Dictionary:
+	var st: Dictionary = Save.get_v("login", {})
+	return {"n": int(st.get("n", 0)) % LOGIN_REWARDS.size(), "can": st.get("last", "") != Time.get_date_string_from_system()}
+
+
+## Забрать награду дня; возвращает число ключей (0 — уже забрана)
+func claim_login() -> int:
+	var st := login_state()
+	if not st.can:
+		return 0
+	var k: int = LOGIN_REWARDS[st.n]
+	keys += k
+	Save.set_v("login", {"last": Time.get_date_string_from_system(), "n": int(Save.get_v("login", {}).get("n", 0)) + 1})
+	return k
+
+
+# ---------- Уровень игрока ----------
+signal level_up(level: int)
+
+const XP_PIECE := 1      ## опыт за поставленную фигуру
+const XP_LINE := 5       ## за каждую очищенную линию
+const XP_WIN := 40       ## за победу в бою или пройденный уровень Аркады
+
+
+static func xp_need(level: int) -> int:
+	return 100 + (level - 1) * 60
+
+
+## {level, cur, need}: уровень, опыт внутри него и сколько нужно до следующего
+func level_info() -> Dictionary:
+	var rest: int = Save.get_v("xp", 0)
+	var lvl := 1
+	while rest >= xp_need(lvl):
+		rest -= xp_need(lvl)
+		lvl += 1
+	return {"level": lvl, "cur": rest, "need": xp_need(lvl)}
+
+
+## Опыт; за каждый новый уровень — ключ
+func add_xp(n: int) -> void:
+	var before: int = level_info().level
+	Save.set_v("xp", int(Save.get_v("xp", 0)) + n)
+	var after: int = level_info().level
+	if after > before:
+		keys += after - before
+		level_up.emit(after)

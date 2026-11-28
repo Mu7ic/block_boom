@@ -171,6 +171,14 @@ static func level_stars(moves: int, par: int) -> int:
 	return 1
 
 
+## Ключей в награду за сезон — по лиге на его конец (как на сервере, SEASON_KEYS)
+static func season_keys(rating: int) -> int:
+	for row in [[1600, 6], [1400, 4], [1250, 3], [1100, 2]]:
+		if rating >= row[0]:
+			return row[1]
+	return 1
+
+
 static func color_hex(c: Color) -> String:
 	return "#" + c.to_html(false)
 
