@@ -181,6 +181,31 @@ func float_text(center: Vector2, main: String, sub: String, size := 1, gold := f
 	tw.chain().tween_callback(box.queue_free)
 
 
+## Маленькое «+10» над клеткой: выскакивает, всплывает и гаснет
+func pop(center: Vector2, text: String, delay := 0.0, size := 30) -> void:
+	var l := UI.label(text, size, Color.WHITE, UI.F_BLACK)
+	l.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_constant_override("outline_size", 8)
+	l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.5))
+	add_child(l)
+	l.reset_size()
+	var sz := l.size
+	l.pivot_offset = sz * 0.5
+	var c: Vector2 = get_global_transform().affine_inverse() * center
+	l.position = c - sz * 0.5
+	l.scale = Vector2.ONE * 0.3
+	l.modulate.a = 0.0
+	var tw := l.create_tween()
+	tw.tween_interval(delay)
+	tw.tween_property(l, "modulate:a", 1.0, 0.08)
+	tw.parallel().tween_property(l, "scale", Vector2.ONE * 1.2, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "scale", Vector2.ONE, 0.1)
+	tw.tween_property(l, "position:y", c.y - sz.y * 0.5 - size * 1.4, 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.5).set_ease(Tween.EASE_IN)
+	tw.tween_callback(l.queue_free)
+
+
 ## Фрукт летит из клетки в счётчик задания
 func fly(text: String, from: Vector2, to: Vector2, size: int, done: Callable) -> void:
 	var l := UI.label(text, size)

@@ -122,7 +122,7 @@ func _run() -> void:
 				g.board[i] = {"c": BB.COLORS[i % 8], "f": ""}
 		g.render_board()
 		await get_tree().process_frame
-		if s % 4 == 0 or s == BB.SKINS.size() - 1:
+		if s % 4 == 0 or s == BB.SKINS.size() - 1 or "--all-skins" in OS.get_cmdline_user_args():
 			await shot("06_skin_%02d_%s" % [s, BB.SKINS[s][0]])
 
 	# Аркада: уровень 12 — цели и камни из генератора, раскладка одинаковая при каждой попытке
@@ -333,6 +333,8 @@ func _run() -> void:
 	await wait(0.4)
 	for k in 12:
 		await play_one(g)
+	await wait(0.22)
+	await shot("29a_cell_points")
 	await wait(0.6)
 	var run_score := g.score
 	var run_bits := GameScreen.bits(g.board)

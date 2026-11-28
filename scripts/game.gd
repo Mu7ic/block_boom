@@ -842,6 +842,11 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 	for idx in placed:
 		if not old.has(idx):
 			board_view.anim_land(idx)
+	# Очки за саму фигуру: «+10» над каждой её клеткой, по очереди
+	if mode != "arcade":
+		var cs := floori(board_view.cell * 0.42)
+		for k in placed.size():
+			fx.pop(board_view.cell_center_global(placed[k]), "+%d" % Scoring.PER_CELL, k * 0.05, cs)
 
 	# Очистка волной от места установки + частицы + сбор фруктов
 	var cr: float = r + (p.h - 1) / 2.0

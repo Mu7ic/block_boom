@@ -47,6 +47,20 @@ static func rrect(ci: CanvasItem, r: Rect2, col: Color, rad: float) -> void:
 	ci.draw_style_box(_sb, r)
 
 
+## Обводка блока — чтобы тёмные стили не сливались с пустыми клетками поля
+static var _ob := StyleBoxFlat.new()
+
+
+static func outline(ci: CanvasItem, r: Rect2, col: Color, rad: float, w: float) -> void:
+	_ob.draw_center = false
+	_ob.border_color = fc(col)
+	_ob.set_border_width_all(maxi(1, roundi(w)))
+	_ob.set_corner_radius_all(int(maxf(rad, 0.0)))
+	_ob.anti_aliasing = true
+	_ob.corner_detail = 5
+	ci.draw_style_box(_ob, r)
+
+
 static func bevel(ci: CanvasItem, r: Rect2, col: Color, rad: float, s: float) -> void:
 	## Фон блока: цвет + тень снизу + блик сверху
 	rrect(ci, r, col.darkened(0.25), rad)
@@ -339,7 +353,8 @@ static func _skin(ci: CanvasItem, R: Rect2, s: float, rad: float, col: Color, sk
 			_star_tiles(ci, R, s * 18.0 / 48.0, Vector2(0.3, 0.4), p * Vector2(1, 1), s * 1.3 / 48.0, Color.WHITE)
 			_star_tiles(ci, R, s * 26.0 / 48.0, Vector2(0.7, 0.2), p * Vector2(-1, 1), s * 1.1 / 48.0, Color("cfe8ff"))
 		"bubble":
-			rrect(ci, R, mix(col, Color("141a3a"), 0.25), rad)
+			rrect(ci, R, mix(col, Color("141a3a"), 0.42), rad)
+			outline(ci, R, mix(col, Color.WHITE, 0.8), rad, s * 0.06)
 			var p := ph(t, 3.0, i * 0.37)
 			var e := p * p   # ease-in
 			var ty := keys(e, [[0.0, 0.3], [0.85, -0.12], [1.0, -0.18]])
