@@ -36,6 +36,7 @@ var daily_rng := RandomNumberGenerator.new()
 var moves := 0                        ## ходов в уровне Аркады (для звёзд)
 var level_par := 0                    ## ходов на три звезды
 var moves_l: Label
+var moves_stars: Label                ## звёзды, на которые сейчас идёт уровень, и до какого хода они держатся
 var daily_rank: Array = []           ## [место, всего] из таблицы дня — для «Поделиться»
 var last_result: Array = [0, 0]       ## счёт последнего боя
 var _t_start := 0.0                   ## когда началась партия — для статистики
@@ -494,7 +495,12 @@ func render_hud() -> void:
 		opp_score_l = _stat("Соперник" if mode == "online" else "Бот 🤖", "0")
 	else:
 		hud.add_theme_constant_override("separation", 22)
-		moves_l = _stat("Ходы", "0/%d" % level_par)
+		# Ходы — не лимит: считаем сделанные, а под ними звёзды, которые сейчас получит игрок
+		moves_l = _stat("Ходы", "0")
+		moves_stars = UI.label("", 22, BB.C_GOLD, UI.F_BLACK)
+		moves_stars.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		moves_l.get_parent().add_child(moves_stars)
+		_update_moves()
 		var row := UI.hrow(hud, 10)
 		for k in goals.size():
 			var g: Dictionary = goals[k]
@@ -612,6 +618,7 @@ func start_game(m: String, n := 1, resume := false) -> void:
 	board_view.reset_fx()
 	moves = 0
 	moves_l = null
+	moves_stars = null
 	revive_used = false
 	_t_start = now()
 	main.set_bg([])
@@ -795,9 +802,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 	_update_combo()
 
 	moves += 1
-	if moves_l:
-		moves_l.text = "%d/%d" % [moves, level_par]
-		moves_l.add_theme_color_override("font_color", Color.WHITE if moves <= level_par else Color(1, 1, 1, 0.6))
+	_update_moves()
 
 	Missions.add_xp(Missions.XP_PIECE + n * Missions.XP_LINE)
 
@@ -959,6 +964,8 @@ func _after_move(max_delay: float, ev: Dictionary) -> void:
 					if g.left > 0:
 						parts.append("%s %d" % [g.f, g.left])
 				_set_text(ov_lose, tr("Осталось собрать: ") + "  ".join(parts))
+			# «Нет ходов» в Аркаде читалось как «кончился лимит ходов» — говорим прямо, что случилось
+			ov_lose.title.text = tr("Фигуры не помещаются") if mode == "arcade" else tr("Нет ходов")
 			ov_lose.revive.visible = mode == "classic" and not revive_used
 			_show_overlay(ov_lose)
 			Audio.sfx("lose")
@@ -1501,6 +1508,17 @@ func on_net(m: Dictionary) -> bool:
 ## Сыгранная партия — в обезличенную статистику (режим, счёт, ходы, длительность)
 func _track_game(win: bool) -> void:
 	main.track("game", {"m": mode, "s": score, "n": moves, "t": int(now() - _t_start), "w": win, "lv": level if mode == "arcade" else 0})
+
+
+## Счётчик ходов Аркады: число ходов и звёзды с порогом, например «★★★ до 16» → «★★ до 24» → «★»
+func _update_moves() -> void:
+	if moves_l == null or not is_instance_valid(moves_stars):
+		return
+	moves_l.text = str(moves)
+	var st := BB.level_stars(moves + 1, level_par)   # звёзды, если уровень закончится следующим ходом
+	var limit := level_par if st == 3 else ceili(level_par * 1.5)
+	moves_stars.text = "★".repeat(st) + ("  " + tr("до %d") % limit if st > 1 else "")
+	moves_stars.modulate = Color.WHITE if st == 3 else Color(1, 1, 1, 0.75)
 
 
 # ---------- Серия комбо на экране ----------

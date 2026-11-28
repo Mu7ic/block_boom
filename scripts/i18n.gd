@@ -45,6 +45,8 @@ const EN := {
 
 	# Игра
 	"Нет ходов": "No moves left",
+	"Фигуры не помещаются": "No room for these pieces",
+	"до %d": "up to %d",
 	"Выйти": "Exit",
 	"Ещё раз": "Play again",
 	"Уровень пройден! 🎉": "Level complete! 🎉",
