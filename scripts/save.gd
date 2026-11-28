@@ -4,7 +4,8 @@ extends Node
 const PATH := "user://blockboom.cfg"
 ## Адрес сервера онлайн-боя по умолчанию (тот же server.js, что и у веб-версии).
 ## Для VPS: "wss://ИМЯ_ДОМЕНА/ws". Игрок может поменять адрес в лобби.
-const DEFAULT_SERVER := "ws://127.0.0.1:8765/ws"
+const DEFAULT_SERVER := "wss://kyrbo.com/ws"
+const OLD_DEFAULT := "ws://127.0.0.1:8765/ws"   ## прежний адрес по умолчанию — заменяем новым
 
 var _cfg := ConfigFile.new()
 var _path := PATH
@@ -71,7 +72,9 @@ var player_name: String:
 	get: return get_v("name", "")
 	set(v): set_v("name", v)
 var server: String:
-	get: return get_v("server", DEFAULT_SERVER)
+	get:
+		var v: String = get_v("server", "")
+		return DEFAULT_SERVER if v == "" or v == OLD_DEFAULT else v
 	set(v): set_v("server", v)
 
 

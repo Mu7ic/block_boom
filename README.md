@@ -31,7 +31,7 @@ D:\Godot\Godot_v4.7.2-stable_win64.exe --path D:\Games\block_boom
 
 **Онлайн** в Godot-версии говорит с тем же `server/server.js` по тому же протоколу —
 игрок из Godot может играть с игроком из браузера. Адрес сервера вводится внизу онлайн-лобби
-(по умолчанию `ws://127.0.0.1:8765/ws`; для VPS — `wss://ИМЯ_ДОМЕНА/ws`, константа `DEFAULT_SERVER` в `scripts/save.gd`).
+(по умолчанию `wss://kyrbo.com/ws`, константа `DEFAULT_SERVER` в `scripts/save.gd`; для локального сервера — `ws://127.0.0.1:8765/ws`).
 Папки `server/` и `deploy/` скрыты от Godot файлами `.gdignore`.
 
 **Только в Godot-версии:**
