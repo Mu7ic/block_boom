@@ -10,7 +10,7 @@ static func now() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
 
-## Логотип «БЛОК БУМ!»: буквы влетают по очереди и покачиваются
+## Логотип «BLOCK BOOM»: буквы влетают по очереди и покачиваются
 class Logo extends Control:
 	var font_size := 96
 	var delay := 0.0
@@ -33,7 +33,7 @@ class Logo extends Control:
 		var f: Font = UI.F_BLACK
 		var t := Widgets.now() - t0
 		var k := 0
-		var lines := [tr("БЛОК"), tr("БУМ!")]
+		var lines := ["BLOCK", "BOOM"]   # название игры не переводим
 		var lh := font_size * 0.92
 		var top := (size.y - lh * 2) * 0.5
 		for li in lines.size():

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a3a8a"/>
+      <stop offset="1" stop-color="#5a3fa8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g>
+    <rect x="76" y="76" width="112" height="112" rx="22" fill="#ff5d5d"/>
+    <rect x="200" y="76" width="112" height="112" rx="22" fill="#ffa93b"/>
+    <rect x="324" y="76" width="112" height="112" rx="22" fill="#ffd84d"/>
+    <rect x="76" y="200" width="112" height="112" rx="22" fill="#4fd67a"/>
+    <rect x="324" y="200" width="112" height="112" rx="22" fill="#36c3ff"/>
+    <rect x="76" y="324" width="112" height="112" rx="22" fill="#5d7bff"/>
+    <rect x="200" y="324" width="112" height="112" rx="22" fill="#b45dff"/>
+    <rect x="324" y="324" width="112" height="112" rx="22" fill="#ff6fc8"/>
+  </g>
+  <g fill="#fff" opacity=".3">
+    <rect x="90" y="86" width="84" height="12"/><rect x="214" y="86" width="84" height="12"/><rect x="338" y="86" width="84" height="12"/>
+    <rect x="90" y="210" width="84" height="12"/><rect x="338" y="210" width="84" height="12"/>
+    <rect x="90" y="334" width="84" height="12"/><rect x="214" y="334" width="84" height="12"/><rect x="338" y="334" width="84" height="12"/>
+  </g>
+  <g fill="#ffd84d">
+    <polygon points="256,206 268,238 302,232 280,258 300,288 266,280 256,312 246,280 212,288 232,258 210,232 244,238"/>
+  </g>
+  <circle cx="256" cy="259" r="16" fill="#fff"/>
+</svg>

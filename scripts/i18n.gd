@@ -8,9 +8,6 @@ const LANGS := ["ru", "en"]
 
 const EN := {
 	# Название и меню
-	"Блок Бум!": "Block Boom!",
-	"БЛОК": "BLOCK",
-	"БУМ!": "BOOM!",
 	"Коснись, чтобы начать": "Tap to start",
 	"Классика": "Classic",
 	"играй на рекорд": "beat your best score",

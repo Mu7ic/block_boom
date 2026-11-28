@@ -16,7 +16,20 @@ func _ready() -> void:
 	if "--test-save" in OS.get_cmdline_user_args():
 		_path = "user://blockboom_test.cfg"
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(_path))
+	_migrate_old_dir()
 	_cfg.load(_path)
+
+
+## На ПК папка сохранений зависит от названия игры: после переименования
+## «Блок Бум!» → «Block Boom» забираем прогресс из старой папки (на телефоне путь не менялся)
+func _migrate_old_dir() -> void:
+	var cur := ProjectSettings.globalize_path(PATH)
+	if FileAccess.file_exists(cur) or OS.has_feature("mobile"):
+		return
+	var old := OS.get_user_data_dir().get_base_dir().path_join("Блок Бум!").path_join(PATH.get_file())
+	if FileAccess.file_exists(old):
+		DirAccess.make_dir_recursive_absolute(cur.get_base_dir())
+		DirAccess.copy_absolute(old, cur)
 
 
 func get_v(key: String, def = null):

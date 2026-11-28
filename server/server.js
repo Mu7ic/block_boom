@@ -95,6 +95,7 @@ const server = http.createServer((req, res) => {
     res.end(`ok rooms=${rooms.size} players=${wss.clients.size} queue=${queue.length}`);
     return;
   }
+  if (url.startsWith('/blockboom')) return serveSite(url, req, res);
   if (url !== '/' && url !== '/index.html') {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Не найдено');
@@ -110,6 +111,53 @@ const server = http.createServer((req, res) => {
     res.end(data);
   });
 });
+
+// ---------- Страница игры: /blockboom ----------
+// /blockboom/            — страница со скачиванием (site/index.html)
+// /blockboom/img/…       — картинки страницы
+// /blockboom/play/       — веб-версия игры (для iPhone и ПК)
+// /blockboom/BlockBoom.apk — APK; setup-kyrbo.sh кладёт его в site/, иначе ссылка на GitHub Releases
+const SITE_DIR = path.join(__dirname, '..', 'site');
+const APK_FILE = process.env.APK_FILE || path.join(SITE_DIR, 'BlockBoom.apk');
+const APK_FALLBACK = 'https://github.com/Mu7ic/block_boom/releases/latest/download/BlockBoom.apk';
+const MIME = { '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png' };
+
+function sendFile(res, file, type, extra = {}) {
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Не найдено');
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': type, 'Content-Length': st.size, ...extra });
+    fs.createReadStream(file).pipe(res);
+  });
+}
+
+function serveSite(url, req, res) {
+  if (url === '/blockboom' || url === '/blockboom/play') {
+    res.writeHead(301, { Location: url + '/' });
+    res.end();
+    return;
+  }
+  if (url === '/blockboom/' || url === '/blockboom/index.html')
+    return sendFile(res, path.join(SITE_DIR, 'index.html'), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
+  if (url === '/blockboom/play/')
+    return sendFile(res, GAME_FILE, 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
+  if (url === '/blockboom/BlockBoom.apk') {
+    if (!fs.existsSync(APK_FILE)) {
+      res.writeHead(302, { Location: APK_FALLBACK });
+      res.end();
+      return;
+    }
+    return sendFile(res, APK_FILE, 'application/vnd.android.package-archive',
+      { 'Content-Disposition': 'attachment; filename="BlockBoom.apk"', 'Cache-Control': 'no-cache' });
+  }
+  const m = url.match(/^\/blockboom\/img\/([a-z0-9_-]+\.(webp|svg|png))$/);
+  if (m) return sendFile(res, path.join(SITE_DIR, 'img', m[1]), MIME['.' + m[2]], { 'Cache-Control': 'public, max-age=3600' });
+  res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('Не найдено');
+}
 
 // ---------- WebSocket: комнаты ----------
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 32 * 1024 });

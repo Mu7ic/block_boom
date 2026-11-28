@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#1d2757">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Блок Бум!</title>
+<title>Block Boom</title>
 <style>
   /* Размер клетки подстраивается и под ширину, и под высоту экрана:
      ~190px занимают шапка и отступы, фигуры внизу — ещё ~3.4 клетки */
@@ -498,7 +498,7 @@ const SHAPES = RAW.map(s => {
   return { cells, h: rows.length, w: Math.max(...rows.map(r => r.length)) };
 });
 
-const GAME_NAME = 'Блок Бум!';
+const GAME_NAME = 'Block Boom';
 
 // ---------- Настройки (запоминаются в браузере) ----------
 const Settings = {
@@ -1960,7 +1960,7 @@ function logoHTML() {
     `<span class="ch" style="--c:${pal[(k * 3) % pal.length]};--k:${k++}">${ch}</span>`).join('')}</span>`;
   const icon = [1, 1, 1, 1, 0, 0, 1, 1, 1].map((on, i) =>
     `<div class="cell${on ? ' block' : ''}" style="--c:${pal[i % pal.length]}"></div>`).join('');
-  return `<div class="logoIcon">${icon}</div><div class="logoText">${word('БЛОК')}${word('БУМ!')}</div>`;
+  return `<div class="logoIcon">${icon}</div><div class="logoText">${word('BLOCK')}${word('BOOM')}</div>`;
 }
 $('splashLogo').innerHTML = logoHTML();
 $('menuLogo').innerHTML = logoHTML();

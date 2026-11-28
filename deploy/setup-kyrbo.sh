@@ -36,9 +36,16 @@ else
   git clone -b "$BRANCH" https://github.com/Mu7ic/block_boom.git "$DIR"
 fi
 
-step "3/6 Зависимости"
+step "3/6 Зависимости и APK"
 cd "$DIR/server"
 npm install --omit=dev --no-audit --no-fund
+# APK для страницы kyrbo.com/blockboom — последняя версия из GitHub Releases
+if curl -fsSL -o "$DIR/site/BlockBoom.apk.new" https://github.com/Mu7ic/block_boom/releases/latest/download/BlockBoom.apk; then
+  mv -f "$DIR/site/BlockBoom.apk.new" "$DIR/site/BlockBoom.apk"
+  echo "APK: $(du -h "$DIR/site/BlockBoom.apk" | cut -f1)"
+else
+  echo "APK не скачан — страница будет отдавать ссылку на GitHub"
+fi
 
 # Где Caddy: в Docker-контейнере (образ caddy:*) или обычным сервисом.
 # Из контейнера 127.0.0.1 — это сам контейнер, поэтому сервер игры слушает адрес
@@ -81,29 +88,38 @@ if [ -n "${SUBNET:-}" ] && command -v ufw >/dev/null && ufw status | grep -q "St
   ufw allow from "$SUBNET" to any port 8765 proto tcp >/dev/null && echo "ufw: разрешён доступ из $SUBNET"
 fi
 
-step "5/6 Caddy: $DOMAIN/ws -> $UPSTREAM"
-if grep -q "reverse_proxy /ws $UPSTREAM" "$CADDYFILE"; then
-  echo "уже настроено"
-else
-  BAK="$CADDYFILE.bak.$(date +%s)"
-  cp "$CADDYFILE" "$BAK"
-  TMP=$(mktemp)
-  if grep -q "reverse_proxy /ws " "$CADDYFILE"; then
-    sed -E "s#reverse_proxy /ws [^[:space:]]+#reverse_proxy /ws $UPSTREAM#" "$CADDYFILE" > "$TMP"
+step "5/6 Caddy: $DOMAIN/ws и $DOMAIN/blockboom -> $UPSTREAM"
+BAK="$CADDYFILE.bak.$(date +%s)"
+cp "$CADDYFILE" "$BAK"
+NEW=$(cat "$CADDYFILE")
+
+## Строка «reverse_proxy <путь> <адрес>» в блоке kyrbo.com: добавить, поправить адрес или оставить.
+## Ставится сразу после «kyrbo.com {». reverse_proxy в Caddy срабатывает раньше file_server,
+## поэтому остальной сайт не меняется. WebSocket Caddy проксирует сам.
+caddy_route() {
+  local route="$1" re
+  re=$(printf '%s' "$route" | sed 's/[*]/\\*/g')
+  if printf '%s\n' "$NEW" | grep -qE "reverse_proxy $re $UPSTREAM\$"; then
+    echo "$route: уже настроено"
+  elif printf '%s\n' "$NEW" | grep -qE "reverse_proxy $re "; then
+    NEW=$(printf '%s\n' "$NEW" | sed -E "s#reverse_proxy $re [^[:space:]]+#reverse_proxy $route $UPSTREAM#")
+    echo "$route: адрес обновлён"
   else
-    # Строка сразу после «kyrbo.com {». reverse_proxy в Caddy срабатывает раньше file_server,
-    # поэтому остальной сайт не меняется. WebSocket Caddy проксирует сам.
-    if ! grep -qE "^[[:space:]]*(https?://)?$DOMAIN([[:space:]]|,|\{)" "$CADDYFILE"; then
-      echo "В $CADDYFILE нет блока $DOMAIN — добавьте вручную:  reverse_proxy /ws $UPSTREAM"; exit 1
+    if ! printf '%s\n' "$NEW" | grep -qE "^[[:space:]]*(https?://)?$DOMAIN([[:space:]]|,|\{)"; then
+      echo "В $CADDYFILE нет блока $DOMAIN — добавьте вручную:  reverse_proxy $route $UPSTREAM"; exit 1
     fi
-    sed -E "0,/^[[:space:]]*(https?:\/\/)?${DOMAIN//./\.}([[:space:]]|,).*\{/s//&\n\treverse_proxy \/ws $UPSTREAM/" "$CADDYFILE" > "$TMP"
+    NEW=$(printf '%s\n' "$NEW" | sed -E "0,/^[[:space:]]*(https?:\/\/)?${DOMAIN//./\\.}([[:space:]]|,).*\{/s//&\n\treverse_proxy ${route//\//\\/} $UPSTREAM/")
+    echo "$route: добавлено"
   fi
-  cat "$TMP" > "$CADDYFILE"; rm -f "$TMP"   # запись поверх, а не замена файла: так её видит и контейнер
-fi
+}
+caddy_route "/ws"
+caddy_route "/blockboom*"
+printf '%s\n' "$NEW" > "$CADDYFILE"   # запись поверх, а не замена файла: так её видит и контейнер
+
 if ! caddy_cmd validate >/dev/null 2>&1; then
   echo "Caddyfile не прошёл проверку — возвращаю прежний"
   caddy_cmd validate || true
-  [ -n "${BAK:-}" ] && cat "$BAK" > "$CADDYFILE"; exit 1
+  cat "$BAK" > "$CADDYFILE"; exit 1
 fi
 caddy_cmd reload
 
@@ -111,4 +127,6 @@ step "6/6 Проверка"
 sleep 1
 code=$(curl -s -o /dev/null -w '%{http_code}' --http1.1 -H "Connection: Upgrade" -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" -m 5 "https://$DOMAIN/ws" || true)
-if [ "$code" = "101" ]; then echo "ГОТОВО: wss://$DOMAIN/ws работает"; else echo "Ответ $code — смотрите: journalctl -u blockboom -n 50; docker logs ${CADDY_CT:-caddy} --tail 50"; fi
+page=$(curl -s -o /dev/null -w '%{http_code}' -m 5 "https://$DOMAIN/blockboom/" || true)
+echo "Страница https://$DOMAIN/blockboom/ — ответ $page"
+if [ "$code" = "101" ] && [ "$page" = "200" ]; then echo "ГОТОВО: wss://$DOMAIN/ws и https://$DOMAIN/blockboom/ работают"; else echo "Ответ $code — смотрите: journalctl -u blockboom -n 50; docker logs ${CADDY_CT:-caddy} --tail 50"; fi
