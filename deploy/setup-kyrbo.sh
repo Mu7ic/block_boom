@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Установка/обновление сервера «Блок Бум!» на VPS с Caddy (kyrbo.com).
-# Запуск на сервере одной командой (от root):
-#   curl -fsSL https://raw.githubusercontent.com/Mu7ic/block_boom/godot-port/deploy/setup-kyrbo.sh | bash
+# Запуск на сервере одной командой:
+#   curl -fsSL https://raw.githubusercontent.com/Mu7ic/block_boom/godot-port/deploy/setup-kyrbo.sh | sudo bash
 # Повторный запуск безопасен: обновит код и перезапустит сервис.
 set -euo pipefail
 
@@ -11,6 +11,11 @@ DIR=/opt/blockboom
 CADDYFILE=/etc/caddy/Caddyfile
 
 step() { echo; echo "=== $* ==="; }
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Нужны права root. Запустите так:  curl -fsSL https://raw.githubusercontent.com/Mu7ic/block_boom/godot-port/deploy/setup-kyrbo.sh | sudo bash"
+  exit 1
+fi
 
 step "1/6 Node.js"
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 18 ]; then
