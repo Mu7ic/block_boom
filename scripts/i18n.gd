@@ -1,0 +1,269 @@
+class_name I18N
+extends RefCounted
+## Языки: русский (исходный текст в коде) и английский.
+## Ключ перевода — сама русская строка, поэтому Label и Button переводятся автоматически,
+## а строки с числами оборачиваются в tr() до подстановки: tr("Счёт: %d") % score.
+
+const LANGS := ["ru", "en"]
+
+const EN := {
+	# Название и меню
+	"Блок Бум!": "Block Boom!",
+	"БЛОК": "BLOCK",
+	"БУМ!": "BOOM!",
+	"Коснись, чтобы начать": "Tap to start",
+	"Классика": "Classic",
+	"играй на рекорд": "beat your best score",
+	"Вызов дня 📅": "Daily Challenge 📅",
+	"одни фигуры для всех": "same pieces for everyone",
+	"🔥 серия %d дн.": "🔥 %d-day streak",
+	" · лучший %d": " · best %d",
+	"Аркада": "Arcade",
+	"уровни с фруктами": "levels with fruit",
+	"Против бота 🤖": "Vs Bot 🤖",
+	"кто больше за 3 минуты": "most points in 3 minutes",
+	"Онлайн-бой 🌐": "Online Battle 🌐",
+	"рейтинг и бои с друзьями": "ranked and friend battles",
+	"🎨 Коллекция": "🎨 Collection",
+	"🎨 Коллекция %d/%d": "🎨 Collection %d/%d",
+	"🎯 Задания": "🎯 Missions",
+	"🎯 Задания %d/3": "🎯 Missions %d/3",
+	"🏆 Лучшие": "🏆 Top",
+	"← Меню": "← Menu",
+	"← Назад": "← Back",
+	"Заново": "Restart",
+
+	# Обучение
+	"Перетаскивай фигуры": "Drag the pieces",
+	"Бери фигуру снизу и ставь на поле. Хватать можно за любое место вокруг фигуры.": "Take a piece from the bottom and drop it on the board. You can grab anywhere around the piece.",
+	"Собирай линии": "Clear lines",
+	"Заполни строку или столбец целиком — они исчезнут и дадут очки. Несколько ходов подряд — комбо!": "Fill a whole row or column and it disappears for points. Clear on several moves in a row for a combo!",
+	"3 линии сразу = ×5": "3 lines at once = ×5",
+	"Снеси 3 и больше линий одним ходом — очки ×5 и новый стиль блоков. Собери все 20!": "Clear 3 or more lines in one move for ×5 points and a new block style. Collect all 20!",
+	"Четыре режима": "Game modes",
+	"Классика — играй на рекорд.\nАркада — 30 уровней, собирай фрукты.\nПротив бота и онлайн — кто больше за 3 минуты.": "Classic — beat your best score.\nArcade — 30 levels, collect the fruit.\nVs Bot and Online — most points in 3 minutes.",
+	"Пропустить": "Skip",
+	"Далее": "Next",
+	"Играть!": "Play!",
+
+	# Игра
+	"Нет ходов": "No moves left",
+	"Выйти": "Exit",
+	"Ещё раз": "Play again",
+	"Уровень пройден! 🎉": "Level complete! 🎉",
+	"К уровням": "Levels",
+	"Следующий →": "Next →",
+	"Меню": "Menu",
+	"Реванш": "Rematch",
+	"🤖 Бот": "🤖 Bot",
+	"думает…": "thinking…",
+	"ставит…": "placing…",
+	"подсчёт…": "counting…",
+	"время вышло": "time's up",
+	"играет": "playing",
+	"готовится…": "getting ready…",
+	"бой окончен": "battle over",
+	"новый стиль": "new style",
+	"новое поле": "new board",
+	"Счёт": "Score",
+	"Рекорд": "Best",
+	"Вызов дня": "Daily",
+	"Лучший сегодня": "Today's best",
+	"Ты": "You",
+	"Время": "Time",
+	"Соперник": "Rival",
+	"Бот 🤖": "Bot 🤖",
+	"Уровень": "Level",
+	"Новый рекорд!": "New record!",
+	"🍓 Фрукты спрятаны в блоках.\nОчищай линии с ними, чтобы выполнить задание сверху!": "🍓 Fruit is hidden in blocks.\nClear lines with them to complete the goal at the top!",
+	"⏱ У вас 3 минуты!\nНабери больше очков, чем бот 🤖": "⏱ You have 3 minutes!\nScore more than the bot 🤖",
+	"📅 Сегодня у всех одинаковые фигуры.\nНабери больше всех — и попади в таблицу дня!": "📅 Everyone gets the same pieces today.\nScore the most to top the daily leaderboard!",
+	"Невероятно!": "Incredible!",
+	"Отлично!": "Excellent!",
+	"Хорошо!": "Good!",
+	"Комбо ×%d": "Combo ×%d",
+	"Чистое поле!": "Board cleared!",
+	"Новый стиль!": "New style!",
+	"Уровень %d — все фрукты собраны": "Level %d — all fruit collected",
+	"Счёт: [b]%d[/b]   ·   лучший сегодня: [b]%d[/b]": "Score: [b]%d[/b]   ·   today's best: [b]%d[/b]",
+	"🔥 Серия: %d дн.": "🔥 Streak: %d days",
+	"Счёт: [b]%d[/b]": "Score: [b]%d[/b]",
+	"Осталось собрать: ": "Still to collect: ",
+	"Загружаем таблицу дня…": "Loading the daily leaderboard…",
+	"Таблица дня недоступна: нет связи с сервером": "Daily leaderboard unavailable: no connection to the server",
+	"Место %d из %d": "Rank %d of %d",
+	"Игрок": "Player",
+	"Ты победил! 🏆": "You win! 🏆",
+	"Бот победил 🤖": "The bot wins 🤖",
+	"Ничья 🤝": "Draw 🤝",
+	"Ты [b]%d[/b] : [b]%d[/b] Бот": "You [b]%d[/b] : [b]%d[/b] Bot",
+	"Ты [b]%d[/b] : [b]%d[/b] %s": "You [b]%d[/b] : [b]%d[/b] %s",
+	"%s победил": "%s wins",
+	"Ждём соперника…": "Waiting for your rival…",
+	"Новая лига: %s %s!": "New league: %s %s!",
+	"Лига: %s %s": "League: %s %s",
+	"%s хочет реванш!": "%s wants a rematch!",
+	"Соперник вышел — победа! 🏆": "Your rival left — you win! 🏆",
+	"Соперник ушёл": "Your rival left",
+	"Связь потеряна 📡": "Connection lost 📡",
+	"📤 Поделиться": "📤 Share",
+	"Скопировано — отправь друзьям": "Copied — send it to your friends",
+	"«%s»: мой счёт %d в классике! Побьёшь?": "%s: I scored %d in Classic! Can you beat it?",
+	"«%s», вызов дня %s: %d очков%s. Сможешь больше?": "%s, Daily Challenge %s: %d points%s. Can you do better?",
+	", место %d из %d": ", rank %d of %d",
+	"«%s»: прошёл уровень %d Аркады!": "%s: I beat Arcade level %d!",
+	"«%s»: онлайн-бой %d : %d %s": "%s: online battle %d : %d %s",
+	"«%s»: бой с ботом %d : %d": "%s: battle vs bot %d : %d",
+
+	# Карта Аркады
+	"Ходы": "Moves",
+	"Уровень %d": "Level %d",
+	"Мир %d": "World %d",
+	"Дальше — новые миры ✨": "More worlds ahead ✨",
+	"Ходов: %d": "Moves: %d",
+	"на ★★★ — не больше %d": "★★★ needs %d or fewer",
+	"Сад": "Garden",
+	"Цитрусовая роща": "Citrus Grove",
+	"Ягодный лес": "Berry Forest",
+	"Остров": "Island",
+	"Ледник": "Glacier",
+	"Вулкан": "Volcano",
+
+	# Уровни, коллекция
+	"Выбери уровень": "Choose a level",
+	"Коллекция стилей": "Style Collection",
+	"Стили открываются, когда сносишь 3+ линии за ход, и в сундуке заданий. Нажми на стиль — начнёшь игру с ним.": "Styles unlock when you clear 3+ lines in one move, and in the mission chest. Tap a style to play with it.",
+	"Эффекты очистки": "Clear Effects",
+	"Новые эффекты — в сундуке за задания дня 🎁": "New effects come from the daily mission chest 🎁",
+	"Собрано %d из %d": "Collected %d of %d",
+	"Фон": "Background",
+	"Новые фоны — тоже в сундуке 🎁": "New backgrounds are in the chest too 🎁",
+
+	# Задания
+	"Задания дня 🎯": "Daily Missions 🎯",
+	"🎁 Открыть сундук": "🎁 Open the chest",
+	"новый стиль, эффект или фон": "new style, effect or background",
+	"Новые задания через %d ч %d мин": "New missions in %d h %d min",
+	"Новый стиль блоков: %s! 🎨": "New block style: %s! 🎨",
+	"Новый эффект: %s! ✨\nВыбери его в коллекции": "New effect: %s! ✨\nPick it in the collection",
+	"Новый фон: %s! 🖼\nВыбери его в коллекции": "New background: %s! 🖼\nPick it in the collection",
+	"Ты уже собрал всё! 🏆": "You've collected everything! 🏆",
+	"🎯 Задание выполнено! +🔑": "🎯 Mission complete! +🔑",
+	"Очисти %d линий": "Clear %d lines",
+	"Снеси 3+ линии за ход: %d раз": "Clear 3+ lines in one move %d times",
+	"Сделай комбо ×%d": "Make a ×%d combo",
+	"Набери %d очков за одну игру": "Score %d points in one game",
+	"Очисти поле целиком": "Clear the whole board",
+	"Победи бота или соперника: %d раз": "Beat the bot or a rival %d times",
+	"Пройди уровни Аркады: %d": "Beat %d Arcade levels",
+	"Поставь %d фигур": "Place %d pieces",
+	"Собери %d фруктов в Аркаде": "Collect %d fruit in Arcade",
+	"Сыграй вызов дня": "Play the Daily Challenge",
+
+	# Онлайн
+	"3 минуты — у кого больше очков": "3 minutes — most points wins",
+	"Твоё имя": "Your name",
+	"⚡ Быстрый бой": "⚡ Quick Battle",
+	"соперник по рейтингу": "matched by rating",
+	"или с другом — без рейтинга": "or with a friend — unranked",
+	"Создать комнату": "Create a room",
+	"Код": "Code",
+	"Войти": "Join",
+	"КОД КОМНАТЫ": "ROOM CODE",
+	"Ждём соперника": "Waiting for your rival",
+	"📤 Скопировать для друга": "📤 Copy for a friend",
+	"Отмена": "Cancel",
+	"Ищем соперника": "Finding a rival",
+	"Подбираем игрока с похожим рейтингом": "Looking for a player with a similar rating",
+	"🤖 Пока сыграть с ботом": "🤖 Play the bot meanwhile",
+	"Сервер:": "Server:",
+	"  ·  боёв: %d": "  ·  battles: %d",
+	"Подключаемся…": "Connecting…",
+	"Укажи адрес сервера внизу": "Enter the server address below",
+	"Сервер недоступен. Попробуй позже или сыграй с ботом 🤖": "Server unavailable. Try later or play the bot 🤖",
+	"Введи код из 4 цифр": "Enter the 4-digit code",
+	"Го в «%s» онлайн! Код комнаты: %s": "Join me in %s online! Room code: %s",
+	"Скопировано — отправь другу": "Copied — send it to a friend",
+	"Ошибка": "Error",
+	"Соперник отключился": "Your rival disconnected",
+	"Связь с сервером потеряна": "Lost connection to the server",
+	"Старт!": "Go!",
+	# Сообщения сервера
+	"Комната не найдена": "Room not found",
+	"В этой комнате уже играют": "This room is already playing",
+	"Время ожидания вышло": "Waiting time is over",
+	"Нет профиля": "No profile",
+
+	# Лучшие игроки
+	"Лучшие игроки 🏆": "Top Players 🏆",
+	"Загружаем…": "Loading…",
+	"Нет связи с сервером": "No connection to the server",
+	"Пока никто не играл рейтинговые бои": "No ranked battles yet",
+	"Твоё место: %d из %d": "Your rank: %d of %d",
+	"Сыграй быстрый бой, чтобы попасть в таблицу": "Play a quick battle to get on the board",
+
+	# Стили, лиги, эффекты, фоны
+	"Диско-шар ✨": "Disco Ball ✨",
+	"Арбузики 🍉": "Watermelons 🍉",
+	"Яичница 🍳": "Fried Eggs 🍳",
+	"Неон": "Neon",
+	"Карамельки 🍬": "Candies 🍬",
+	"Желе": "Jelly",
+	"Глазастики 👀": "Googly Eyes 👀",
+	"Лёд ❄️": "Ice ❄️",
+	"Золото 👑": "Gold 👑",
+	"Пиксели": "Pixels",
+	"Аквариум 🌊": "Aquarium 🌊",
+	"Пончики 🍩": "Donuts 🍩",
+	"Печеньки 🍪": "Cookies 🍪",
+	"Дерево": "Wood",
+	"Космос 🌌": "Galaxy 🌌",
+	"Пузыри 🔵": "Bubbles 🔵",
+	"Сердечки 💖": "Hearts 💖",
+	"Матрица": "Matrix",
+	"Пицца 🍕": "Pizza 🍕",
+	"Бронза": "Bronze",
+	"Серебро": "Silver",
+	"Золото": "Gold",
+	"Платина": "Platinum",
+	"Алмаз": "Diamond",
+	"Конфетти": "Confetti",
+	"Искры": "Sparks",
+	"Звёзды": "Stars",
+	"Сердечки": "Hearts",
+	"Пузыри": "Bubbles",
+	"Волны": "Ripples",
+	"Сумерки": "Twilight",
+	"Океан": "Ocean",
+	"Закат": "Sunset",
+	"Лес": "Forest",
+	"Космос": "Space",
+	"Карамель": "Candy",
+}
+
+
+## Подключить перевод и выбрать язык: сохранённый или язык системы
+static func setup() -> void:
+	var t := Translation.new()
+	t.locale = "en"
+	for k in EN:
+		t.add_message(k, EN[k])
+	TranslationServer.add_translation(t)
+	apply(current())
+
+
+static func current() -> String:
+	var l: String = Save.get_v("lang", "")
+	if l == "":
+		l = "ru" if OS.get_locale_language() in ["ru", "uk", "be", "kk"] else "en"
+	return l
+
+
+static func apply(lang: String) -> void:
+	Save.set_v("lang", lang)
+	TranslationServer.set_locale(lang)
+
+
+## Для статических функций, где нет tr()
+static func t(s: String) -> String:
+	return TranslationServer.translate(s)

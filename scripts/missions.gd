@@ -53,7 +53,7 @@ func list() -> Array:
 
 
 func text(m: Dictionary) -> String:
-	var t: String = POOL[m.id][0]
+	var t: String = tr(POOL[m.id][0])
 	return t % m.target if t.contains("%d") else t
 
 
@@ -98,7 +98,7 @@ func _update(id: String, change: Callable) -> void:
 		Save.set_v("missions", cur)
 
 
-## Сундук: случайная закрытая награда (стиль блоков или эффект очистки).
+## Сундук: случайная закрытая награда (стиль блоков, эффект очистки или фон).
 ## Возвращает {kind: "skin"/"effect"/"", id, name}
 func open_chest() -> Dictionary:
 	if not chest_ready():
@@ -112,12 +112,19 @@ func open_chest() -> Dictionary:
 	for e in BB.EFFECTS:
 		if not eff.has(e[0]):
 			pool.append({"kind": "effect", "id": e[0], "name": e[1]})
+	var th := Save.themes_got()
+	for e in BB.THEMES:
+		if not th.has(e[0]):
+			pool.append({"kind": "theme", "id": e[0], "name": e[1]})
 	keys -= KEYS_PER_CHEST
 	if pool.is_empty():
 		return {"kind": "", "id": "", "name": ""}
 	var r: Dictionary = pool[randi() % pool.size()]
-	if r.kind == "skin":
-		Save.add_skin(r.id)
-	else:
-		Save.add_effect(r.id)
+	match r.kind:
+		"skin":
+			Save.add_skin(r.id)
+		"effect":
+			Save.add_effect(r.id)
+		"theme":
+			Save.add_theme(r.id)
 	return r

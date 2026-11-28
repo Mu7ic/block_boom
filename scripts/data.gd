@@ -11,7 +11,6 @@ const COLORS := [
 ]
 const STONE := Color("5a6396")
 const FRUITS := ["🍓", "🍋", "🍇", "🍊", "🍏", "🍒"]
-const LEVEL_COUNT := 30
 
 # Цвета интерфейса
 const C_BG1 := Color("1d2757")
@@ -97,16 +96,79 @@ static func skin_index(id: String) -> int:
 	return 0
 
 
-## Уровень Аркады: больше фруктов, больше видов, больше камней на старте
+# ---------- Аркада: бесконечная карта ----------
+## Мир — 10 уровней со своим фоном и набором фруктов. После последнего мира
+## карта идёт по кругу, а уровни продолжают усложняться.
+## [название, значок, цвет фона снизу, цвет фона сверху, фрукты]
+const WORLDS := [
+	["Сад", "🌷", Color("1f4a3a"), Color("2b6a45"), ["🍓", "🍏", "🍒"]],
+	["Цитрусовая роща", "🍋", Color("5a4a16"), Color("8a6420"), ["🍋", "🍊", "🍏"]],
+	["Ягодный лес", "🌲", Color("2a1f4f"), Color("4a2d6e"), ["🍇", "🍓", "🍒"]],
+	["Остров", "🏝", Color("0f3d5a"), Color("16707e"), ["🍊", "🍇", "🍋"]],
+	["Ледник", "❄️", Color("23406e"), Color("4a78a8"), ["🍏", "🍇", "🍒"]],
+	["Вулкан", "🌋", Color("4a1a1a"), Color("8a3220"), ["🍓", "🍊", "🍋"]],
+]
+const LEVELS_PER_WORLD := 10
+
+
+static func world_of(n: int) -> int:
+	return (n - 1) / LEVELS_PER_WORLD
+
+
+static func world_def(w: int) -> Array:
+	return WORLDS[w % WORLDS.size()]
+
+
+## Уровень n (с 1, без верхней границы). Всё зависит только от n:
+## у всех игроков и при каждой попытке уровень одинаковый.
 static func level_def(n: int) -> Dictionary:
-	var kinds := 1 if n <= 3 else (2 if n <= 10 else 3)
-	var start := (n * 2) % FRUITS.size()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("blockboom-arcade-%d" % n)
+	var w := world_of(n)
+	var i := (n - 1) % LEVELS_PER_WORLD        # место в мире: 0…9
+	var boss := i == LEVELS_PER_WORLD - 1      # каждый 10-й — «босс»: больше камней и фруктов
+	# Сложность растёт быстро в начале и плавно выходит на плато, но не останавливается
+	var d := 1.0 - exp(-float(n) / 35.0)
+	var loop := w / WORLDS.size()
+	var kinds := 1 if n <= 3 else (2 if n <= 12 else 3)
+	if boss and n > 3:
+		kinds = mini(3, kinds + 1)
+	var fruits: Array = world_def(w)[4].duplicate()
+	# Порядок фруктов в мире перемешиваем от номера уровня
+	for k in range(fruits.size() - 1, 0, -1):
+		var j := rng.randi_range(0, k)
+		var tmp = fruits[k]
+		fruits[k] = fruits[j]
+		fruits[j] = tmp
 	var goals := []
+	var total := 0
 	for k in kinds:
-		var need := maxi(3, 3 + int(floor(n * 0.7)) - k * 2)
-		goals.append({"f": FRUITS[(start + k) % FRUITS.size()], "need": need, "left": need})
-	var stones := 0 if n < 3 else mini(4 + n, 24)
-	return {"goals": goals, "stones": stones}
+		var need := 3 + roundi(8.0 * d) + i / 3 + loop - k * 2 + rng.randi_range(-1, 1)
+		if boss:
+			need = roundi(need * 1.3)
+		need = clampi(need, 3, 30)
+		total += need
+		goals.append({"f": fruits[k], "need": need, "left": need})
+	var stones := 0
+	if n >= 3:
+		stones = clampi(3 + roundi(15.0 * d) + rng.randi_range(-2, 2) + (4 if boss else 0), 0, 24)
+	# Ходов на три звезды: подобрано по прохождениям ИИ (tools/arcade_calib.gd)
+	var par := ceili(total * PAR_PER_FRUIT + stones * PAR_PER_STONE + PAR_BASE)
+	return {"goals": goals, "stones": stones, "par": par, "world": w, "boss": boss, "seed": rng.randi()}
+
+
+const PAR_PER_FRUIT := 1.2
+const PAR_PER_STONE := 0.0
+const PAR_BASE := 5.0
+
+
+## Звёзды за пройденный уровень по числу ходов
+static func level_stars(moves: int, par: int) -> int:
+	if moves <= par:
+		return 3
+	if moves <= ceili(par * 1.5):
+		return 2
+	return 1
 
 
 static func color_hex(c: Color) -> String:
@@ -142,7 +204,7 @@ static func league(rating: int) -> Array:
 ## «🥈 Серебро · 1180»
 static func league_text(rating: int) -> String:
 	var l := league(rating)
-	return "%s %s · %d" % [l[2], l[1], rating]
+	return "%s %s · %d" % [l[2], I18N.t(l[1]), rating]
 
 
 ## День по UTC, как у сервера: «2026-11-27»
@@ -160,6 +222,25 @@ const EFFECTS := [
 	["bubbles", "Пузыри", "🔵"],
 	["rings", "Волны", "🌀"],
 ]
+
+
+# ---------- Фоны ----------
+## [id, название, цвет сверху-слева, цвет снизу-справа]
+const THEMES := [
+	["night", "Сумерки", Color("1d2757"), Color("3a2d78")],
+	["ocean", "Океан", Color("0b3550"), Color("16707e")],
+	["sunset", "Закат", Color("4a1f4f"), Color("b04a3c")],
+	["forest", "Лес", Color("0f3328"), Color("2c6236")],
+	["space", "Космос", Color("07071c"), Color("281450")],
+	["candy", "Карамель", Color("5c2463"), Color("c2557f")],
+]
+
+
+static func theme_def(id: String) -> Array:
+	for t in THEMES:
+		if t[0] == id:
+			return t
+	return THEMES[0]
 
 
 static func effect_index(id: String) -> int:

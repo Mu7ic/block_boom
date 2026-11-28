@@ -263,6 +263,17 @@ wss.on('connection', ws => {
         send(ws, dailyReply(day, m.id));
         break;
       }
+      case 'top': {
+        // Лучшие по рейтингу (только сыгравшие рейтинговые бои) и своё место
+        const all = Object.entries(db.players).filter(([, p]) => p.games > 0)
+          .sort((x, y) => y[1].rating - x[1].rating);
+        const i = all.findIndex(([id]) => id === m.id);
+        send(ws, {
+          t: 'topList', total: all.length, rank: i >= 0 ? i + 1 : 0,
+          top: all.slice(0, 20).map(([id, p]) => ({ name: p.name, rating: p.rating, games: p.games, you: id === m.id })),
+        });
+        break;
+      }
       case 'create': {
         leave(ws);
         const code = newCode();

@@ -33,7 +33,7 @@ class Logo extends Control:
 		var f: Font = UI.F_BLACK
 		var t := Widgets.now() - t0
 		var k := 0
-		var lines := ["БЛОК", "БУМ!"]
+		var lines := [tr("БЛОК"), tr("БУМ!")]
 		var lh := font_size * 0.92
 		var top := (size.y - lh * 2) * 0.5
 		for li in lines.size():

@@ -44,6 +44,26 @@ var best: int:
 var unlocked: int:
 	get: return get_v("unlocked", 1)
 	set(v): set_v("unlocked", v)
+
+
+# ---------- Звёзды уровней Аркады ----------
+func level_stars(n: int) -> int:
+	return int(get_v("stars", {}).get(str(n), 0))
+
+
+## Запомнить лучший результат уровня
+func set_level_stars(n: int, st: int) -> void:
+	var all: Dictionary = get_v("stars", {})
+	if st > int(all.get(str(n), 0)):
+		all[str(n)] = st
+		set_v("stars", all)
+
+
+func total_stars() -> int:
+	var t := 0
+	for v in get_v("stars", {}).values():
+		t += int(v)
+	return t
 var skin: int:
 	get: return BB.skin_index(get_v("skin", "classic"))
 	set(v): set_v("skin", BB.SKINS[v][0])
@@ -150,6 +170,23 @@ func add_effect(id: String) -> void:
 	if not e.has(id):
 		e.append(id)
 		set_v("effects", e)
+
+
+# ---------- Фоны ----------
+var bg_theme: String:
+	get: return get_v("theme", "night")
+	set(v): set_v("theme", v)
+
+
+func themes_got() -> Array:
+	return get_v("themes", ["night"])
+
+
+func add_theme(id: String) -> void:
+	var e := themes_got()
+	if not e.has(id):
+		e.append(id)
+		set_v("themes", e)
 
 
 # ---------- Одноразовые подсказки ----------

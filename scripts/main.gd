@@ -15,6 +15,15 @@ var tog_music: Widgets.Toggle
 var tog_vibro: Widgets.Toggle
 var menu_logo: Widgets.Logo
 var daily_btn: Button
+var bg_override: Array = []     ## фон мира Аркады во время уровня
+var level_map: LevelMap
+var level_scroll: ScrollContainer
+var stars_l: Label
+var lang_btn: Button
+# лучшие игроки
+var top_list: VBoxContainer
+var top_me: Label
+var theme_grid: GridContainer
 var mis_btn: Button
 var mis_dot: Control
 # задания
@@ -25,7 +34,6 @@ var reward_l: Label
 var renew_l: Label
 var eff_grid: GridContainer
 # уровни / коллекция
-var level_grid: GridContainer
 var coll_grid: GridContainer
 var coll_bar: ProgressBar
 var coll_text: Label
@@ -70,6 +78,7 @@ const TUT := [
 
 func _ready() -> void:
 	UI.init_fonts()
+	I18N.setup()
 	Skins.font = UI.F_BOLD
 	theme = UI.make_theme()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -87,6 +96,7 @@ func _ready() -> void:
 	_build_collection()
 	_build_missions()
 	_build_online()
+	_build_top()
 	game = GameScreen.new()
 	game.main = self
 	game.fx = fx
@@ -97,16 +107,28 @@ func _ready() -> void:
 	fx.z_index = 30
 	Net.message.connect(_on_net)
 	Missions.done.connect(func(txt: String):
-		toast("🎯 Задание выполнено! +🔑\n" + txt)
+		toast(tr("🎯 Задание выполнено! +🔑") + "\n" + txt)
 		Audio.sfx("record"))
 	show_screen("splash")
 
 
 func _draw() -> void:
-	# Фон: диагональный градиент как в веб-версии
+	# Фон: диагональный градиент как в веб-версии, цвета — из выбранной темы
 	var s := size
+	var th := BB.theme_def(Save.bg_theme)
+	var c1: Color = th[2]
+	var c2: Color = th[3]
+	if bg_override.size() == 2:
+		c1 = bg_override[1]
+		c2 = bg_override[0]
 	draw_polygon(PackedVector2Array([Vector2.ZERO, Vector2(s.x, 0), s, Vector2(0, s.y)]),
-		PackedColorArray([BB.C_BG1, BB.C_BG1.lerp(BB.C_BG2, 0.45), BB.C_BG2, BB.C_BG1.lerp(BB.C_BG2, 0.55)]))
+		PackedColorArray([c1, c1.lerp(c2, 0.45), c2, c1.lerp(c2, 0.55)]))
+
+
+func set_bg(cols: Array) -> void:
+	if cols != bg_override:
+		bg_override = cols
+		queue_redraw()
 
 
 func _notification(what: int) -> void:
@@ -134,6 +156,8 @@ func _go_back() -> void:
 		else:
 			Net.send({"t": "leave"})
 			show_screen("menu")
+	elif current == "top":
+		open_online()
 	elif current != "splash":
 		show_screen("menu")
 
@@ -265,6 +289,15 @@ func _build_menu() -> void:
 	row2.add_child(tog_vibro)
 	for t in [tog_sound, tog_music, tog_vibro]:
 		t.pressed.connect(func(): Audio.sfx("click"))
+	lang_btn = Widgets.Toggle.new(I18N.current().to_upper())
+	lang_btn.add_theme_font_size_override("font_size", 30)
+	lang_btn.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	lang_btn.pressed.connect(func():
+		Audio.sfx("click")
+		var langs: Array = I18N.LANGS
+		I18N.apply(langs[(langs.find(I18N.current()) + 1) % langs.size()])
+		update_menu())
+	row2.add_child(lang_btn)
 	var help := Widgets.Toggle.new("❓")
 	help.pressed.connect(func():
 		Audio.sfx("click")
@@ -297,9 +330,10 @@ func refresh_toggles() -> void:
 
 
 func update_menu() -> void:
-	coll_btn.text = "🎨 Коллекция %d/%d" % [Save.got().size(), BB.SKINS.size()]
+	coll_btn.text = tr("🎨 Коллекция %d/%d") % [Save.got().size(), BB.SKINS.size()]
 	coll_dot.visible = Save.has_new_skins()
-	mis_btn.text = "🎯 Задания %d/3" % Missions.done_count()
+	mis_btn.text = tr("🎯 Задания %d/3") % Missions.done_count()
+	lang_btn.text = I18N.current().to_upper()
 	mis_dot.visible = Missions.chest_ready()
 	await get_tree().process_frame
 	coll_dot.position = Vector2(coll_btn.size.x - 24, 6)
@@ -309,52 +343,45 @@ func update_menu() -> void:
 	var sub: Label = daily_btn.get_child(0).get_child(1)
 	var st := Save.daily_streak
 	var best := Save.daily_best(BB.today())
-	sub.text = ("🔥 серия %d дн." % st if st > 0 else "одни фигуры для всех") + (" · лучший %d" % best if best > 0 else "")
+	sub.text = (tr("🔥 серия %d дн.") % st if st > 0 else tr("одни фигуры для всех")) + (tr(" · лучший %d") % best if best > 0 else "")
 
 
-# ---------- Уровни Аркады ----------
+# ---------- Карта Аркады ----------
 func _build_levels() -> void:
 	var s := _screen("levels")
-	var v := VBoxContainer.new()
-	v.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	v.add_theme_constant_override("separation", 34)
-	s.add_child(v)
-	var sp := Control.new()
-	sp.custom_minimum_size = Vector2(0, 100)
-	v.add_child(sp)
-	v.add_child(UI.label("Выбери уровень", 48, Color.WHITE, UI.F_BLACK))
-	level_grid = GridContainer.new()
-	level_grid.columns = 5
-	level_grid.add_theme_constant_override("h_separation", 20)
-	level_grid.add_theme_constant_override("v_separation", 20)
-	v.add_child(UI.centered(level_grid))
+	level_scroll = ScrollContainer.new()
+	level_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	level_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	level_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	s.add_child(level_scroll)
+	level_map = LevelMap.new()
+	level_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	level_map.play.connect(func(n: int): game.start_game("arcade", n))
+	level_scroll.add_child(level_map)
+	# Шапка поверх карты
+	var head := PanelContainer.new()
+	head.add_theme_stylebox_override("panel", UI.box(Color(0.05, 0.06, 0.16, 0.55), 0, Vector4(0, 0, 0, 0)))
+	head.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	head.custom_minimum_size = Vector2(0, 104)
+	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	s.add_child(head)
+	stars_l = UI.label("", 34, BB.C_GOLD, UI.F_BLACK)
+	stars_l.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	stars_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	stars_l.position = Vector2(-260, 26)
+	stars_l.size = Vector2(236, 56)
+	s.add_child(stars_l)
 	_back_button(s, func(): show_screen("menu"))
 
 
 func open_levels() -> void:
-	for ch in level_grid.get_children():
-		ch.queue_free()
-	var un := Save.unlocked
-	for n in range(1, BB.LEVEL_COUNT + 1):
-		var locked := n > un
-		var done := n < un
-		var bg := Color(1, 1, 1, 0.1) if locked else (BB.C_GREEN if done else BB.C_GOLD)
-		var b := UI.button("🔒" if locked else str(n), bg, Color(1, 1, 1, 0.35) if locked else BB.C_INK, 36, Vector2(104, 104))
-		for k in ["normal", "hover", "pressed", "disabled"]:
-			var sb: StyleBoxFlat = b.get_theme_stylebox(k).duplicate()
-			sb.set_corner_radius_all(26)
-			b.add_theme_stylebox_override(k, sb)
-		if done:
-			var ok := UI.label("✓", 22, BB.C_INK)
-			ok.position = Vector2(78, 2)
-			b.add_child(ok)
-		if not locked:
-			b.pressed.connect(func(): game.start_game("arcade", n))
-		else:
-			b.mouse_default_cursor_shape = Control.CURSOR_ARROW
-		level_grid.add_child(b)
 	show_screen("levels")
+	stars_l.text = "★ %d" % Save.total_stars()
+	level_map.rebuild()
+	# Прокрутка к текущему уровню (после раскладки)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	level_scroll.scroll_vertical = int(level_map.level_pos(Save.unlocked).y - level_scroll.size.y * 0.55)
 
 
 # ---------- Коллекция стилей ----------
@@ -402,6 +429,19 @@ func _build_collection() -> void:
 	v.add_child(UI.centered(eff_grid))
 	var hint2 := UI.label("Новые эффекты — в сундуке за задания дня 🎁", 25, Color(1, 1, 1, 0.6), UI.F_REG)
 	v.add_child(UI.centered(hint2))
+	var sp3 := Control.new()
+	sp3.custom_minimum_size = Vector2(0, 16)
+	v.add_child(sp3)
+	v.add_child(UI.label("Фон", 40, Color.WHITE, UI.F_BLACK))
+	theme_grid = GridContainer.new()
+	theme_grid.columns = 3
+	theme_grid.add_theme_constant_override("h_separation", 16)
+	theme_grid.add_theme_constant_override("v_separation", 16)
+	v.add_child(UI.centered(theme_grid))
+	v.add_child(UI.centered(UI.label("Новые фоны — тоже в сундуке 🎁", 25, Color(1, 1, 1, 0.6), UI.F_REG)))
+	var sp4 := Control.new()
+	sp4.custom_minimum_size = Vector2(0, 40)
+	v.add_child(sp4)
 	var bottom := Control.new()
 	bottom.custom_minimum_size = Vector2(0, 50)
 	v.add_child(bottom)
@@ -447,7 +487,8 @@ func open_collection() -> void:
 			badge.position = Vector2(56, -34)
 			prev.add_child(badge)
 	_fill_effects()
-	coll_text.text = "Собрано %d из %d" % [got.size(), BB.SKINS.size()]
+	_fill_themes()
+	coll_text.text = tr("Собрано %d из %d") % [got.size(), BB.SKINS.size()]
 	coll_bar.max_value = BB.SKINS.size()
 	coll_bar.value = 0
 	coll_bar.create_tween().tween_property(coll_bar, "value", float(got.size()), 0.6)
@@ -495,6 +536,106 @@ func _fill_effects() -> void:
 					fx.burst(c, BB.COLORS[(k * 3) % 8], 5, k * 0.05, id))
 
 
+func _fill_themes() -> void:
+	for ch in theme_grid.get_children():
+		ch.queue_free()
+	var got := Save.themes_got()
+	for th in BB.THEMES:
+		var id: String = th[0]
+		var open := got.has(id)
+		var card := PanelContainer.new()
+		card.custom_minimum_size = Vector2(196, 0)
+		var sb := UI.box(Color(0, 0, 0, 0.22), 26, Vector4(14, 14, 14, 12))
+		if id == Save.bg_theme:
+			sb.border_color = BB.C_GOLD
+			sb.set_border_width_all(4)
+		card.add_theme_stylebox_override("panel", sb)
+		var cv := VBoxContainer.new()
+		cv.add_theme_constant_override("separation", 8)
+		cv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		card.add_child(cv)
+		var sw := TextureRect.new()
+		var gt := GradientTexture2D.new()
+		gt.gradient = Gradient.new()
+		gt.gradient.set_color(0, th[2])
+		gt.gradient.set_color(1, th[3])
+		gt.fill_to = Vector2(1, 1)
+		sw.texture = gt
+		sw.custom_minimum_size = Vector2(160, 70)
+		sw.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		sw.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		if not open:
+			sw.modulate = Color(0.35, 0.35, 0.35)
+			var lock := UI.label("🔒", 34)
+			lock.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			sw.add_child(lock)
+		cv.add_child(sw)
+		cv.add_child(UI.label(th[1] if open else "???", 22, Color(1, 1, 1, 0.9 if open else 0.4), UI.F_BOLD))
+		theme_grid.add_child(card)
+		if open:
+			_selectable(card, func():
+				Save.bg_theme = id
+				queue_redraw()
+				_fill_themes())
+
+
+# ---------- Лучшие игроки ----------
+func _build_top() -> void:
+	var s := _screen("top")
+	var v := UI.center_box(s, 18)
+	v.add_child(UI.label("Лучшие игроки 🏆", 50, Color.WHITE, UI.F_BLACK))
+	top_me = UI.label("", 28, BB.C_GOLD, UI.F_BLACK)
+	top_me.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	top_me.custom_minimum_size = Vector2(600, 0)
+	v.add_child(UI.centered(top_me))
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UI.box(Color(0, 0, 0, 0.22), 30, Vector4(28, 20, 28, 20)))
+	panel.custom_minimum_size = Vector2(620, 0)
+	v.add_child(UI.centered(panel))
+	top_list = VBoxContainer.new()
+	top_list.add_theme_constant_override("separation", 6)
+	panel.add_child(top_list)
+	_back_button(s, open_online)
+
+
+func open_top() -> void:
+	for ch in top_list.get_children():
+		ch.queue_free()
+	top_me.text = tr("Загружаем…")
+	show_screen("top")
+	var r: Dictionary = await Net.request(Save.server, {"t": "top", "id": Save.player_id}, "topList", 5.0)
+	if current != "top":
+		return
+	if r.is_empty():
+		top_me.text = tr("Нет связи с сервером")
+		return
+	var top: Array = r.get("top", []) if r.get("top") is Array else []
+	if top.is_empty():
+		top_me.text = tr("Пока никто не играл рейтинговые бои")
+		return
+	var rank := int(r.get("rank", 0))
+	top_me.text = tr("Твоё место: %d из %d") % [rank, int(r.get("total", 0))] if rank > 0 else tr("Сыграй быстрый бой, чтобы попасть в таблицу")
+	for k in mini(top.size(), 15):
+		var e = top[k]
+		if not (e is Dictionary):
+			continue
+		var you: bool = e.get("you", false)
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 14)
+		top_list.add_child(row)
+		var col := BB.C_GOLD if you else Color.WHITE
+		var n := UI.label("%d." % (k + 1), 26, Color(1, 1, 1, 0.55), UI.F_BOLD, HORIZONTAL_ALIGNMENT_RIGHT)
+		n.custom_minimum_size = Vector2(52, 0)
+		row.add_child(n)
+		var rt := int(e.get("rating", 0))
+		var nm := UI.label("%s %s" % [BB.league(rt)[2], str(e.get("name", "?"))], 28, col, UI.F_BOLD, HORIZONTAL_ALIGNMENT_LEFT)
+		nm.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+		nm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		nm.clip_text = true
+		row.add_child(nm)
+		row.add_child(UI.label(str(rt), 28, col, UI.F_BLACK, HORIZONTAL_ALIGNMENT_RIGHT))
+
+
 # ---------- Задания дня ----------
 func _build_missions() -> void:
 	var s := _screen("missions")
@@ -510,7 +651,7 @@ func _build_missions() -> void:
 	v.add_child(gap)
 	keys_l = UI.label("", 44, BB.C_GOLD, UI.F_BLACK)
 	v.add_child(keys_l)
-	chest_btn = UI.big_button("🎁 Открыть сундук", "новый стиль или эффект", BB.C_GOLD)
+	chest_btn = UI.big_button("🎁 Открыть сундук", "новый стиль, эффект или фон", BB.C_GOLD)
 	chest_btn.pressed.connect(open_chest)
 	v.add_child(UI.centered(chest_btn))
 	reward_l = UI.label("", 32, Color.WHITE, UI.F_BLACK)
@@ -552,7 +693,7 @@ func open_missions() -> void:
 	_update_chest()
 	var now_d := Time.get_datetime_dict_from_system()
 	var left: int = (23 - now_d.hour) * 60 + (59 - now_d.minute)
-	renew_l.text = "Новые задания через %d ч %d мин" % [left / 60, left % 60]
+	renew_l.text = tr("Новые задания через %d ч %d мин") % [left / 60, left % 60]
 	show_screen("missions")
 
 
@@ -578,11 +719,13 @@ func open_chest() -> void:
 	Audio.buzz([30, 40, 80])
 	match r.kind:
 		"skin":
-			reward_l.text = "Новый стиль блоков: %s! 🎨" % r.name
+			reward_l.text = tr("Новый стиль блоков: %s! 🎨") % tr(r.name)
 		"effect":
-			reward_l.text = "Новый эффект: %s! ✨\nВыбери его в коллекции" % r.name
+			reward_l.text = tr("Новый эффект: %s! ✨\nВыбери его в коллекции") % tr(r.name)
+		"theme":
+			reward_l.text = tr("Новый фон: %s! 🖼\nВыбери его в коллекции") % tr(r.name)
 		_:
-			reward_l.text = "Ты уже собрал всё! 🏆"
+			reward_l.text = tr("Ты уже собрал всё! 🏆")
 	_update_chest()
 
 
@@ -609,6 +752,10 @@ func _build_online() -> void:
 	quick.pressed.connect(quick_match)
 	lobby_main.add_child(UI.centered(quick))
 	lobby_main.add_child(UI.label("или с другом — без рейтинга", 25, Color(1, 1, 1, 0.5), UI.F_REG))
+	var top_btn := UI.button("🏆 Лучшие", Color(1, 1, 1, 0.12), Color.WHITE, 26, Vector2(0, 62))
+	_pad(top_btn, 28)
+	top_btn.pressed.connect(open_top)
+	lobby_main.add_child(UI.centered(top_btn))
 	var create := UI.button("Создать комнату", Color(1, 1, 1, 0.16), Color.WHITE, 30, Vector2(470, 84))
 	create.pressed.connect(create_room)
 	lobby_main.add_child(UI.centered(create))
@@ -699,8 +846,8 @@ func _build_online() -> void:
 	tm.autostart = true
 	tm.timeout.connect(func():
 		dots[0] = (dots[0] + 1) % 4
-		wait_label.text = "Ждём соперника" + ".".repeat(dots[0])
-		search_l.text = "Ищем соперника" + ".".repeat(dots[0])
+		wait_label.text = tr("Ждём соперника") + ".".repeat(dots[0])
+		search_l.text = tr("Ищем соперника") + ".".repeat(dots[0])
 		if lobby_search.visible:
 			var sec := int(now() - search_t0)
 			search_time_l.text = "%d:%02d" % [sec / 60, sec % 60]
@@ -738,7 +885,7 @@ func lobby_view(state: String) -> void:
 func update_rating_label() -> void:
 	var g := Save.rated_games
 	var l := BB.league(Save.rating)
-	rating_l.text = BB.league_text(Save.rating) + ("" if g == 0 else "  ·  боёв: %d" % g)
+	rating_l.text = BB.league_text(Save.rating) + ("" if g == 0 else tr("  ·  боёв: %d") % g)
 	rating_l.add_theme_color_override("font_color", l[3])
 
 
@@ -772,7 +919,7 @@ func set_lobby_status(t: String) -> void:
 func player_name() -> String:
 	var n := name_in.text.strip_edges().substr(0, 16)
 	Save.player_name = n
-	return n if n != "" else "Игрок"
+	return n if n != "" else tr("Игрок")
 
 
 func ensure_connected() -> bool:
@@ -802,7 +949,7 @@ func join_room() -> void:
 
 
 func share_room() -> void:
-	DisplayServer.clipboard_set("Го в «%s» онлайн! Код комнаты: %s" % [BB.GAME_NAME, lobby_code])
+	DisplayServer.clipboard_set(tr("Го в «%s» онлайн! Код комнаты: %s") % [tr(BB.GAME_NAME), lobby_code])
 	set_lobby_status("Скопировано — отправь другу")
 
 
@@ -822,12 +969,12 @@ func _on_net(m: Dictionary) -> void:
 			lobby_view("search")
 			set_lobby_status("")
 			return
-		"profile", "dailyTop":
+		"profile", "dailyTop", "topList":
 			return   # ответы на запросы (Net.request)
 		"error":
 			if current == "online":
 				lobby_view("main")
-				set_lobby_status(str(m.get("msg", "Ошибка")))
+				set_lobby_status(tr(str(m.get("msg", "Ошибка"))))
 			return
 	if game.on_net(m):
 		return
@@ -983,7 +1130,7 @@ func open_tutorial() -> void:
 func _render_tut() -> void:
 	tut_demo.set_step(tut_step)
 	tut_title.text = TUT[tut_step][0]
-	tut_text.text = TUT[tut_step][1]
+	tut_text.text = TUT[tut_step][1]   # Label переводит сам
 	for ch in tut_dots.get_children():
 		ch.queue_free()
 	for i in TUT.size():

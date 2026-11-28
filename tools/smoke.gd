@@ -125,12 +125,28 @@ func _run() -> void:
 		if s % 4 == 0 or s == BB.SKINS.size() - 1:
 			await shot("06_skin_%02d_%s" % [s, BB.SKINS[s][0]])
 
-	# Аркада: уровень 12 (камни, три вида фруктов)
+	# Аркада: уровень 12 — цели и камни из генератора, раскладка одинаковая при каждой попытке
+	var def12 := BB.level_def(12)
 	g.start_game("arcade", 12)
 	await wait(0.5)
-	check(g.goals.size() == 3, "arcade 12 has 3 goals")
+	check(g.goals.size() == def12.goals.size(), "arcade 12 goals=%d" % g.goals.size())
 	var stones := g.board.filter(func(c): return c != null and c.c == BB.STONE).size()
-	check(stones == 16, "arcade 12 stones=%d" % stones)
+	check(stones == def12.stones, "arcade 12 stones=%d" % stones)
+	var layout := GameScreen.bits(g.board)
+	g.start_game("arcade", 12)
+	await wait(0.3)
+	check(GameScreen.bits(g.board) == layout, "arcade: same stones on restart")
+	# Уровни без конца: далёкие уровни тоже собираются и не выходят за пределы
+	var far_ok := true
+	for n in [1, 9, 10, 31, 99, 100, 1000, 54321]:
+		var d := BB.level_def(n)
+		var tot := 0
+		for gl in d.goals:
+			tot += gl.need
+			far_ok = far_ok and gl.need >= 3 and gl.need <= 30
+		far_ok = far_ok and d.stones <= 24 and d.par > 0 and not d.goals.is_empty()
+		print("level ", n, ": world ", d.world, " boss ", d.boss, " goals ", d.goals.map(func(x): return "%s%d" % [x.f, x.need]), " stones ", d.stones, " par ", d.par)
+	check(far_ok, "endless levels generate sanely")
 	await shot("07_arcade")
 	moves = 0
 	while not g.finished and moves < 150:
@@ -222,11 +238,11 @@ func _run() -> void:
 	check(ml.size() == 3, "missions: 3 today")
 	print("missions: ", ml.map(func(m): return "%s %d/%d" % [m.id, m.prog, m.target]))
 	Missions.keys = 3
-	var before := Save.got().size() + Save.effects_got().size()
+	var before := Save.got().size() + Save.effects_got().size() + Save.themes_got().size()
 	main.open_missions()
 	await wait(0.3)
 	main.open_chest()
-	check(Save.got().size() + Save.effects_got().size() == before + 1 and Missions.keys == 0, "missions: chest gives a reward")
+	check(Save.got().size() + Save.effects_got().size() + Save.themes_got().size() == before + 1 and Missions.keys == 0, "missions: chest gives a reward")
 	await wait(0.4)
 	await shot("19_missions")
 
@@ -259,8 +275,9 @@ func _run() -> void:
 	await shot("11_collection")
 	main.open_levels()
 	await wait(0.3)
-	var lv: Array = main.level_grid.get_children()
-	check(lv.size() == BB.LEVEL_COUNT and lv[11].text == "12" and lv[12].text == "13" and lv[13].text == "🔒", "levels: 13 unlocked (unlocked=%d)" % Save.unlocked)
+	var nodes: Dictionary = main.level_map._nodes
+	check(nodes.size() == 30 and nodes[13].text == "13", "level map: %d nodes, unlocked=%d" % [nodes.size(), Save.unlocked])
+	check(Save.level_stars(12) > 0, "level 12 stars saved (%d)" % Save.level_stars(12))
 	await shot("12_levels")
 	main.open_online()
 	await wait(0.3)
@@ -271,6 +288,50 @@ func _run() -> void:
 		await wait(1.2)
 		await shot("14_tutorial_%d" % k)
 		main.tut_next.pressed.emit()
+	main._close_tutorial()
+
+	# Английский язык: подписи переводятся, тексты с числами тоже
+	I18N.apply("en")
+	main.show_screen("menu")
+	await wait(0.6)
+	check(tr("Вызов дня 📅") == "Daily Challenge 📅", "en: translation active")
+	I18N.apply("ru")
+	check(tr("Вызов дня 📅") == "Вызов дня 📅", "ru: stays russian")
+	I18N.apply("en")
+	check(main.mis_btn.text.begins_with("🎯 Missions"), "en: dynamic text translated (%s)" % main.mis_btn.text)
+	await shot("23_en_menu")
+	g.start_game("classic")
+	await wait(0.4)
+	for k in 4:
+		await play_one(g)
+	await wait(0.4)
+	await shot("24_en_game")
+	main.open_missions()
+	await wait(0.3)
+	check(main.renew_l.text.begins_with("New missions"), "en: missions screen")
+	await shot("25_en_missions")
+	main.open_online()
+	await wait(0.3)
+	await shot("26_en_online")
+	I18N.apply("ru")
+
+	# Фоны: выбор темы
+	Save.add_theme("sunset")
+	Save.bg_theme = "sunset"
+	main.open_collection()
+	await wait(0.4)
+	var sc: ScrollContainer = main.screens["collection"].get_child(0)
+	sc.scroll_vertical = 100000
+	await wait(0.3)
+	await shot("27_themes")
+	Save.bg_theme = "night"
+	main.queue_redraw()
+
+	# Лучшие игроки (без сервера — сообщение о связи)
+	main.open_top()
+	await wait(13.0)   # подключение до 6 с + ответ до 5 с
+	check(main.top_me.text != "Загружаем…", "top: loaded or offline note (%s)" % main.top_me.text)
+	await shot("28_top")
 
 	print("DONE errors=", errors)
 	get_tree().quit(1 if errors else 0)

@@ -148,6 +148,8 @@ static func heart_poly(p: Vector2, size: float) -> PackedVector2Array:
 ## Блок в стиле skin. stone — камень Аркады (без стиля). fruit — эмодзи поверх.
 static func block(ci: CanvasItem, pos: Vector2, s: float, col: Color, skin: int, t: float, i: int,
 		fruit := "", stone := false, scale := 1.0, radius := 0.125) -> void:
+	if s * scale < 1.0:
+		return   # блок в начале/конце анимации — многоугольники такого размера не рисуются
 	_ci = ci
 	_k = scale
 	_c = pos + Vector2(s, s) * 0.5
