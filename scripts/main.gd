@@ -157,8 +157,19 @@ func _unhandled_input(ev: InputEvent) -> void:
 		_go_back()
 
 
+var _back_at := -1000
+
+
 func _go_back() -> void:
-	if tut_root.visible:
+	# На Android одно нажатие «Назад» приходит дважды (уведомлением и клавишей) —
+	# без этой защиты игра уходила в меню и тут же закрывалась
+	var t := Time.get_ticks_msec()
+	if t - _back_at < 350:
+		return
+	_back_at = t
+	if login_root.visible:
+		login_root.visible = false
+	elif tut_root.visible:
 		_close_tutorial()
 	elif current == "game":
 		game._on_back()

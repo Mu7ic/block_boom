@@ -424,6 +424,13 @@ func _run() -> void:
 	main.update_menu()
 	check(not main.upd_btn.visible, "update: hidden on the latest build")
 
+	# Системная кнопка «Назад»: двойной сигнал за одно нажатие не должен закрывать игру
+	main.show_screen("missions")
+	main._back_at = -1000
+	main._go_back()
+	main._go_back()
+	check(main.current == "menu", "back: one press (double signal) goes to menu, not out of the game")
+
 	# Лучшие игроки (без сервера — сообщение о связи)
 	main.open_top()
 	await wait(13.0)   # подключение до 6 с + ответ до 5 с
