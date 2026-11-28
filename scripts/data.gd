@@ -216,8 +216,8 @@ static func league_text(rating: int) -> String:
 
 
 ## День по UTC, как у сервера: «2026-11-27»
-static func today() -> String:
-	return Time.get_date_string_from_unix_time(int(Time.get_unix_time_from_system()))
+static func today(shift_sec := 0) -> String:
+	return Time.get_date_string_from_unix_time(int(Time.get_unix_time_from_system()) + shift_sec)
 
 
 # ---------- Эффекты очистки линий ----------

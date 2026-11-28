@@ -60,6 +60,13 @@ var unlocked: int:
 	set(v): set_v("unlocked", v)
 
 
+# ---------- Вызов дня без сети ----------
+## Результат, который не удалось отправить: {day, score}. Уйдёт в таблицу, когда появится интернет.
+var daily_pending: Dictionary:
+	get: return get_v("daily_pending", {})
+	set(v): set_v("daily_pending", v)
+
+
 # ---------- Незаконченная партия «Классики» ----------
 var run: Dictionary:
 	get: return get_v("run", {})
@@ -98,6 +105,9 @@ var player_name: String:
 	set(v): set_v("name", v)
 var server: String:
 	get:
+		# Проверочные сцены никогда не ходят на боевой сервер (иначе их результаты попадают в таблицы)
+		if _path != PATH and not _cfg.has_section_key("save", "server"):
+			return "ws://127.0.0.1:9/ws"
 		var v: String = get_v("server", "")
 		return DEFAULT_SERVER if v == "" or v == OLD_DEFAULT else v
 	set(v): set_v("server", v)

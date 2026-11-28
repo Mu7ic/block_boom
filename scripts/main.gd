@@ -240,6 +240,9 @@ func _build_splash() -> void:
 		Audio.sfx("boom")
 		Audio.buzz(40)
 		show_screen("menu")
+		# При запуске тихо отправляем результат вызова дня, сыгранного без сети
+		if not Save.daily_pending.is_empty():
+			get_tree().create_timer(2.0).timeout.connect(flush_daily)
 		if not Save.get_v("tut", false):
 			get_tree().create_timer(0.25).timeout.connect(open_tutorial))
 
@@ -1004,11 +1007,27 @@ func update_rating_label() -> void:
 		season_l.text = tr("Сезон: ещё %d д. %d ч  ·  награда за лигу: 🔑×%d") % [left / 86400, left % 86400 / 3600, BB.season_keys(Save.rating)]
 
 
+## Отложенный результат вызова дня — отправляем, когда сеть появилась (сервер принимает сегодня и вчера)
+func flush_daily() -> void:
+	var pend := Save.daily_pending
+	if pend.is_empty():
+		return
+	var day := str(pend.get("day", ""))
+	if day != BB.today() and day != BB.today(-86400):
+		Save.daily_pending = {}   # слишком старый — таблица того дня уже закрыта
+		return
+	var nm: String = Save.player_name if Save.player_name != "" else tr("Игрок")
+	var r: Dictionary = await Net.request(Save.server, {"t": "daily", "id": Save.player_id, "name": nm, "day": day, "score": int(pend.get("score", 0))}, "dailyTop", 5.0)
+	if not r.is_empty() and Save.daily_pending.get("day", "") == day:
+		Save.daily_pending = {}
+
+
 ## Рейтинг с сервера (тихо, без сообщений об ошибке)
 func refresh_profile() -> void:
 	var r: Dictionary = await Net.request(Save.server, {"t": "hello", "id": Save.player_id, "name": Save.player_name}, "profile", 4.0)
 	if r.is_empty():
 		return
+	flush_daily()
 	Save.rating = int(r.get("rating", Save.rating))
 	Save.rated_games = int(r.get("games", Save.rated_games))
 	_season_from(r)
@@ -1061,7 +1080,7 @@ func ensure_connected() -> bool:
 	if err == "":
 		set_lobby_status("")
 		return true
-	set_lobby_status("Укажи адрес сервера внизу" if err == "nourl" else "Сервер недоступен. Попробуй позже или сыграй с ботом 🤖")
+	set_lobby_status("Укажи адрес сервера внизу" if err == "nourl" else "Нет интернета или сервер недоступен.\nБез сети работают Классика, Аркада, вызов дня и бой с ботом 🤖")
 	return false
 
 

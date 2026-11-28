@@ -973,8 +973,14 @@ func _daily_table(sc: int) -> void:
 	var txt: String = ov_lose.text.text
 	ov_lose.text.text = txt.substr(0, txt.find("\n[font_size=24][color=#ffffff88]")) + "[/center]"
 	if r.is_empty():
-		_append_text(ov_lose, "\n[font_size=24][color=#ffffff99]" + tr("Таблица дня недоступна: нет связи с сервером") + "[/color][/font_size]")
+		# Нет сети: запоминаем лучший результат дня и отправим его позже
+		var pend := Save.daily_pending
+		if pend.get("day", "") != daily_day or int(pend.get("score", 0)) < sc:
+			Save.daily_pending = {"day": daily_day, "score": sc}
+		_append_text(ov_lose, "\n[font_size=24][color=#ffffff99]" + tr("Нет интернета — результат сохранён.\nОн попадёт в таблицу дня, когда появится сеть") + "[/color][/font_size]")
 		return
+	if Save.daily_pending.get("day", "") == daily_day:
+		Save.daily_pending = {}
 	daily_rank = [int(r.get("rank", 0)), int(r.get("total", 0))]
 	var lines := "\n[font_size=30][color=#ffd84d]" + tr("Место %d из %d") % daily_rank + "[/color][/font_size]"
 	var top: Array = r.get("top", []) if r.get("top") is Array else []

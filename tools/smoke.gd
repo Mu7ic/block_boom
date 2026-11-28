@@ -390,6 +390,24 @@ func _run() -> void:
 	check(main.season_l.text != "", "season: lobby line (%s)" % main.season_l.text)
 	check(g.on_net({"t": "emoji", "e": 1}), "emoji: message handled")
 
+	# Без сети: проверочные сцены не ходят на боевой сервер, вызов дня откладывает результат
+	check(Save.server.begins_with("ws://127.0.0.1"), "offline: tests never use the live server (%s)" % Save.server)
+	Save.daily_pending = {}
+	g.start_game("daily")
+	await wait(0.4)
+	for k in 3:
+		await play_one(g)
+	for i in 64:
+		g.board[i] = {"c": BB.COLORS[0], "f": ""} if (i / 8 + i % 8) % 2 == 0 else null
+	g.pieces = [g.new_piece(BBAI.BIG[0]), null, null]
+	g._after_move(0.0, {"placed": [], "cleared": [], "gained": 0, "n": 0})
+	await wait(9.5)
+	check(Save.daily_pending.get("day", "") == BB.today() and int(Save.daily_pending.get("score", 0)) == g.score, "offline: daily result kept for later (%s)" % str(Save.daily_pending))
+	check(g.ov_lose.text.text.contains(tr("Нет интернета — результат сохранён.\nОн попадёт в таблицу дня, когда появится сеть")), "offline: daily note shown")
+	await shot("35_daily_offline")
+	g.leave_game()
+	main.show_screen("menu")
+
 	# Лучшие игроки (без сервера — сообщение о связи)
 	main.open_top()
 	await wait(13.0)   # подключение до 6 с + ответ до 5 с
