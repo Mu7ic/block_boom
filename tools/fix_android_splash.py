@@ -5,7 +5,10 @@
 белое окно со значком. Скрипт заменяет ссылку на цвет прямо в resources.arsc.
 После него APK нужно выровнять (zipalign) и подписать заново (apksigner) — это делает tools/build_apk.sh.
 
-Запуск:  python tools/fix_android_splash.py вход.apk выход.apk 2b2a67
+Заодно умеет оставить в APK движок только для одной архитектуры процессора: движок Godot занимает
+98 % файла и лежит там дважды (arm64-v8a для современных телефонов и armeabi-v7a для старых 32-битных).
+
+Запуск:  python tools/fix_android_splash.py вход.apk выход.apk 2b2a67 [arm64-v8a|armeabi-v7a]
 """
 import struct
 import sys
@@ -35,10 +38,13 @@ def patch_arsc(data: bytes, rgb: int) -> bytes:
 
 def main() -> None:
     src, dst, color = sys.argv[1], sys.argv[2], int(sys.argv[3], 16)
+    abi = sys.argv[4] if len(sys.argv) > 4 else ''
     with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, 'w') as zout:
         for info in zin.infolist():
             if info.filename.startswith('META-INF/') and info.filename.rsplit('.', 1)[-1] in ('SF', 'RSA', 'DSA', 'EC', 'MF'):
                 continue   # старая подпись: APK подписывается заново
+            if abi and info.filename.startswith('lib/') and not info.filename.startswith(f'lib/{abi}/'):
+                continue   # движок для другой архитектуры
             data = zin.read(info.filename)
             if info.filename == 'resources.arsc':
                 data = patch_arsc(data, color)
@@ -46,7 +52,7 @@ def main() -> None:
             new.compress_type = info.compress_type      # несжатые файлы остаются несжатыми
             new.external_attr = info.external_attr
             zout.writestr(new, data)
-    print('ok: цвет заставки #%06x' % color)
+    print('ok: #%06x %s' % (color, abi or 'all'))
 
 
 if __name__ == '__main__':

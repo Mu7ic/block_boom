@@ -324,8 +324,9 @@ th{font-size:13px;opacity:.7;font-weight:600}td:first-child,th:first-child{text-
 // /blockboom/play/       — веб-версия игры (для iPhone и ПК)
 // /blockboom/BlockBoom.apk — APK; setup-kyrbo.sh кладёт его в site/, иначе ссылка на GitHub Releases
 const SITE_DIR = path.join(__dirname, '..', 'site');
-const APK_FILE = process.env.APK_FILE || path.join(SITE_DIR, 'BlockBoom.apk');
-const APK_FALLBACK = 'https://github.com/Mu7ic/block_boom/releases/latest/download/BlockBoom.apk';
+// BlockBoom.apk — для современных телефонов (arm64), BlockBoom-32bit.apk — для старых 32-битных
+const APK_DIR = process.env.APK_DIR || SITE_DIR;
+const APK_FALLBACK = 'https://github.com/Mu7ic/block_boom/releases/latest/download/';
 const MIME = { '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png' };
 
 function sendFile(res, file, type, extra = {}) {
@@ -358,14 +359,16 @@ function serveSite(url, req, res) {
     return sendFile(res, path.join(SITE_DIR, 'index.html'), 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
   if (url === '/blockboom/play/')
     return sendFile(res, GAME_FILE, 'text/html; charset=utf-8', { 'Cache-Control': 'no-cache' });
-  if (url === '/blockboom/BlockBoom.apk') {
-    if (!fs.existsSync(APK_FILE)) {
-      res.writeHead(302, { Location: APK_FALLBACK });
+  const apk = url.match(/^\/blockboom\/(BlockBoom(-32bit)?\.apk)$/);
+  if (apk) {
+    const file = path.join(APK_DIR, apk[1]);
+    if (!fs.existsSync(file)) {
+      res.writeHead(302, { Location: APK_FALLBACK + apk[1] });
       res.end();
       return;
     }
-    return sendFile(res, APK_FILE, 'application/vnd.android.package-archive',
-      { 'Content-Disposition': 'attachment; filename="BlockBoom.apk"', 'Cache-Control': 'no-cache' });
+    return sendFile(res, file, 'application/vnd.android.package-archive',
+      { 'Content-Disposition': `attachment; filename="${apk[1]}"`, 'Cache-Control': 'no-cache' });
   }
   const m = url.match(/^\/blockboom\/img\/([a-z0-9_-]+\.(webp|svg|png))$/);
   if (m) return sendFile(res, path.join(SITE_DIR, 'img', m[1]), MIME['.' + m[2]], { 'Cache-Control': 'public, max-age=3600' });

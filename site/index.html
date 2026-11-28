@@ -88,10 +88,11 @@
       <div class="btns">
         <a class="btn" id="dl" href="BlockBoom.apk" download="BlockBoom.apk">
           <span style="font-size:28px">🤖</span>
-          <span><span data-i="dl">Скачать для Android</span><small data-i="dlsub">APK · версия 1.6 · 52 МБ</small></span>
+          <span><span data-i="dl">Скачать для Android</span><small data-i="dlsub">APK · версия 1.7 · 27 МБ</small></span>
         </a>
         <a class="btn alt" href="play/" data-i="web">🌐 Играть в браузере</a>
       </div>
+      <p class="note" id="old"><span data-i="old">Не устанавливается? Для старых телефонов есть</span> <a href="BlockBoom-32bit.apk" download="BlockBoom-32bit.apk" data-i="oldlink">32-битная версия</a>.</p>
       <p class="note" id="ios" data-i="ios" hidden>На iPhone приложение пока не ставится — играйте в браузере, онлайн-бой там тоже работает.</p>
     </div>
     <div class="qr">
@@ -130,8 +131,10 @@
     title: 'Block Boom — download the game',
     tag: 'Place pieces, clear lines, blow up blocks. Play for a high score, travel an endless level map and battle friends online.',
     dl: 'Download for Android',
-    dlsub: 'APK · version 1.6 · 52 MB',
+    dlsub: 'APK · version 1.7 · 27 MB',
     web: '🌐 Play in browser',
+    old: 'Won’t install? Older phones need the',
+    oldlink: '32-bit version',
     ios: 'The app is not available for iPhone yet — play in the browser, online battles work there too.',
     qr: 'Point your phone camera',
     s1: '5 modes', s2: 'Classic', s3: 'Level map', s4: 'Timed battle',
@@ -164,9 +167,22 @@
   setLang(lang);
   document.getElementById('lang').onclick = () => setLang(document.documentElement.lang === 'en' ? 'ru' : 'en');
 
+  // Телефон с 32-битной системой: главная кнопка сразу ведёт на подходящий файл
+  if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+    navigator.userAgentData.getHighEntropyValues(['bitness']).then(v => {
+      if (v.bitness === '32') {
+        const a = document.getElementById('dl');
+        a.href = 'BlockBoom-32bit.apk';
+        a.setAttribute('download', 'BlockBoom-32bit.apk');
+        document.getElementById('old').hidden = true;
+      }
+    }).catch(() => {});
+  }
+
   // На iPhone APK не нужен: делаем главной кнопку «Играть в браузере»
   if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
     document.getElementById('dl').style.display = 'none';
+    document.getElementById('old').hidden = true;
     document.getElementById('ios').hidden = false;
     document.querySelector('.btn.alt').classList.remove('alt');
   }

@@ -40,12 +40,15 @@ step "3/6 Зависимости и APK"
 cd "$DIR/server"
 npm install --omit=dev --no-audit --no-fund
 # APK для страницы kyrbo.com/blockboom — последняя версия из GitHub Releases
-if curl -fsSL -o "$DIR/site/BlockBoom.apk.new" https://github.com/Mu7ic/block_boom/releases/latest/download/BlockBoom.apk; then
-  mv -f "$DIR/site/BlockBoom.apk.new" "$DIR/site/BlockBoom.apk"
-  echo "APK: $(du -h "$DIR/site/BlockBoom.apk" | cut -f1)"
-else
-  echo "APK не скачан — страница будет отдавать ссылку на GitHub"
-fi
+# (BlockBoom.apk — современные телефоны, BlockBoom-32bit.apk — старые 32-битные)
+for apk in BlockBoom.apk BlockBoom-32bit.apk; do
+  if curl -fsSL -o "$DIR/site/$apk.new" "https://github.com/Mu7ic/block_boom/releases/latest/download/$apk"; then
+    mv -f "$DIR/site/$apk.new" "$DIR/site/$apk"
+    echo "$apk: $(du -h "$DIR/site/$apk" | cut -f1)"
+  else
+    echo "$apk не скачан — страница будет отдавать ссылку на GitHub"
+  fi
+done
 
 # Где Caddy: в Docker-контейнере (образ caddy:*) или обычным сервисом.
 # Из контейнера 127.0.0.1 — это сам контейнер, поэтому сервер игры слушает адрес
