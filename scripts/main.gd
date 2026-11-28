@@ -239,7 +239,7 @@ func _build_menu() -> void:
 	gap.custom_minimum_size = Vector2(0, 10)
 	v.add_child(gap)
 	var b1 := UI.big_button("Классика", "играй на рекорд", BB.C_YELLOW)
-	b1.pressed.connect(func(): game.start_game("classic"))
+	b1.pressed.connect(func(): game.start_game("classic", 1, true))   # продолжит незаконченную партию
 	v.add_child(UI.centered(b1))
 	daily_btn = UI.big_button("Вызов дня 📅", "", Color("ffa93b"))
 	daily_btn.pressed.connect(func(): game.start_game("daily"))

@@ -60,6 +60,18 @@ var unlocked: int:
 	set(v): set_v("unlocked", v)
 
 
+# ---------- Незаконченная партия «Классики» ----------
+var run: Dictionary:
+	get: return get_v("run", {})
+	set(v): set_v("run", v)
+
+
+func clear_run() -> void:
+	if _cfg.has_section_key("save", "run"):
+		_cfg.erase_section_key("save", "run")
+		_cfg.save(_path)
+
+
 # ---------- Звёзды уровней Аркады ----------
 func level_stars(n: int) -> int:
 	return int(get_v("stars", {}).get(str(n), 0))

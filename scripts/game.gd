@@ -37,6 +37,9 @@ var level_par := 0                    ## ходов на три звезды
 var moves_l: Label
 var daily_rank: Array = []           ## [место, всего] из таблицы дня — для «Поделиться»
 var last_result: Array = [0, 0]       ## счёт последнего боя
+var revive_used := false              ## «второй шанс» — один раз за партию
+var combo_pill: ComboPill
+var rec_bar: ProgressBar              ## полоска «до рекорда» под рекордом
 var _tok := 0
 var _bot_tok := 0
 var _score_tw: Tween
@@ -109,6 +112,13 @@ func _ready() -> void:
 	ov_lose = _overlay("Нет ходов", "Выйти", "Ещё раз")
 	ov_lose.left.pressed.connect(_on_back)
 	ov_lose.right.pressed.connect(func(): start_game(mode, level))
+	var rv := UI.button("💖 Второй шанс", BB.C_GREEN, BB.C_INK, 34, Vector2(480, 96))
+	rv.pressed.connect(revive)
+	ov_lose.revive = UI.centered(rv)
+	ov_lose.box.add_child(ov_lose.revive)
+	ov_lose.box.move_child(ov_lose.revive, ov_lose.row.get_index())
+	combo_pill = ComboPill.new()
+	add_child(combo_pill)
 	ov_win = _overlay("Уровень пройден! 🎉", "К уровням", "Следующий →")
 	ov_win.left.pressed.connect(func(): main.open_levels())
 	ov_win.right.pressed.connect(func(): start_game("arcade", level + 1))
@@ -183,7 +193,7 @@ func _overlay(title: String, left: String, right: String) -> Dictionary:
 	sh.add_theme_stylebox_override("normal", UI.box(Color(1, 1, 1, 0.1), 999, Vector4(30, 0, 30, 0)))
 	sh.pressed.connect(share_result)
 	v.add_child(UI.centered(sh))
-	return {"root": root, "title": t, "text": txt, "left": l, "right": r, "share": sh}
+	return {"root": root, "title": t, "text": txt, "left": l, "right": r, "share": sh, "box": v, "row": row}
 
 
 ## Текст результата в буфер обмена — вставить в любой мессенджер
@@ -427,6 +437,7 @@ func _stat(title: String, value: String) -> Label:
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", -4)
 	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	hud.add_child(v)
 	v.add_child(UI.label(tr(title).to_upper(), 21, Color(1, 1, 1, 0.65), UI.F_BOLD))
 	var b := UI.label(value, 56, Color.WHITE, UI.F_BLACK)
@@ -441,13 +452,26 @@ func render_hud() -> void:
 		ch.queue_free()
 	score_l = null
 	best_l = null
+	rec_bar = null
 	timer_l = null
 	opp_score_l = null
 	goal_nodes.clear()
 	hud.add_theme_constant_override("separation", 50)
+	hud.custom_minimum_size.y = 100 + _combo_room()   # под счётом — место для плашки комбо
 	if mode == "classic":
 		score_l = _stat("Счёт", str(score))
 		best_l = _stat("Рекорд", str(Save.best))
+		if best_at_start > 0:
+			# Полоска «до рекорда»: заполняется по мере приближения к лучшему счёту
+			rec_bar = ProgressBar.new()
+			rec_bar.show_percentage = false
+			rec_bar.max_value = 1.0
+			rec_bar.value = minf(1.0, score / float(best_at_start))
+			rec_bar.custom_minimum_size = Vector2(150, 10)
+			rec_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			rec_bar.add_theme_stylebox_override("background", UI.box(Color(1, 1, 1, 0.16), 5))
+			rec_bar.add_theme_stylebox_override("fill", UI.box(BB.C_GOLD, 5))
+			best_l.get_parent().add_child(rec_bar)
 	elif mode == "daily":
 		score_l = _stat("Вызов дня", str(score))
 		best_l = _stat("Лучший сегодня", str(Save.daily_best(daily_day)))
@@ -511,6 +535,8 @@ func update_score() -> void:
 		shown_score = roundi(from + (to - from) * (1.0 - pow(1.0 - k, 3)))
 		if score_l:
 			score_l.text = str(shown_score)
+		if is_instance_valid(rec_bar):
+			rec_bar.value = minf(1.0, shown_score / float(maxi(1, best_at_start)))
 	_score_tw.tween_method(step, 0.0, 1.0, 0.45)
 	if to - from >= 10:
 		_pulse(score_l)
@@ -528,7 +554,7 @@ func _layout() -> void:
 	var W := size.x
 	var H := size.y
 	var dueling := mode == "duel" or mode == "online"
-	var cell := minf(74.0, minf((W - 56.0) / 8.0 - 6.0, (H - (567.0 if dueling else 342.0)) / 11.4))
+	var cell := minf(74.0, minf((W - 56.0) / 8.0 - 6.0, (H - (567.0 if dueling else 342.0 + _combo_room())) / 11.4))
 	cell = floorf(cell)
 	board_view.set_metrics(cell, 5, 14)
 	tray.custom_minimum_size = Vector2(cell * 8 + 54, cell * 3.4)
@@ -545,7 +571,8 @@ func _layout() -> void:
 
 
 # ---------- Начало игры ----------
-func start_game(m: String, n := 1) -> void:
+## resume — продолжить незаконченную партию «Классики», если она сохранена
+func start_game(m: String, n := 1, resume := false) -> void:
 	stop_duel()
 	_tok += 1
 	mode = m
@@ -569,7 +596,14 @@ func start_game(m: String, n := 1) -> void:
 	board_view.reset_fx()
 	moves = 0
 	moves_l = null
+	revive_used = false
 	main.set_bg([])
+	var resumed := false
+	if mode == "classic":
+		if resume:
+			resumed = _load_run(Save.run)
+		if not resumed:
+			Save.clear_run()
 	if mode == "arcade":
 		var def := BB.level_def(level)
 		goals = def.goals
@@ -580,7 +614,8 @@ func start_game(m: String, n := 1) -> void:
 	if mode == "daily":
 		daily_day = BB.today()
 		seed_daily()
-	refill()
+	if not resumed:
+		refill()
 	main.show_screen("game")
 	apply_skin(Save.skin, false)
 	_refresh_mute()
@@ -588,6 +623,9 @@ func start_game(m: String, n := 1) -> void:
 	render_hud()
 	render_board()
 	render_tray(true)
+	_update_combo.call_deferred()
+	if resumed:
+		later(0.35, func(): float_text(tr("Продолжаем!"), tr("твоя партия сохранена"), 2, true))
 	if mode == "duel":
 		start_duel()
 	if mode == "arcade":
@@ -612,6 +650,7 @@ func apply_skin(i: int, remember := true) -> void:
 
 
 func leave_game() -> void:
+	combo_pill.set_state(0, 0)
 	main.set_bg([])
 	stop_duel()
 	_tok += 1
@@ -736,6 +775,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 	var res := scoring.add(p.cells.size(), n, perfect and mode != "arcade")
 	var gained: int = res.gained
 	combo = res.combo
+	_update_combo()
 
 	moves += 1
 	if moves_l:
@@ -864,6 +904,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 func _after_move(max_delay: float, ev: Dictionary) -> void:
 	# Онлайн: отправляем сопернику своё поле после каждого хода
 	send_state(ev)
+	_save_run()
 	var b := bits(board)
 	if not pieces.any(func(x): return x != null and BBAI.fits_anywhere(b, x)):
 		# В дуэли не проигрываем — поле очищается, время идёт дальше
@@ -871,6 +912,8 @@ func _after_move(max_delay: float, ev: Dictionary) -> void:
 			later(max_delay + 0.5, func(): stuck_reset(false))
 			return
 		finished = true
+		if mode == "classic":
+			Save.clear_run()
 		later(max_delay + 0.4, func():
 			board_view.anim_dead()
 			tray.nofit = [true, true, true])
@@ -889,6 +932,7 @@ func _after_move(max_delay: float, ev: Dictionary) -> void:
 					if g.left > 0:
 						parts.append("%s %d" % [g.f, g.left])
 				_set_text(ov_lose, tr("Осталось собрать: ") + "  ".join(parts))
+			ov_lose.revive.visible = mode == "classic" and not revive_used
 			_show_overlay(ov_lose)
 			Audio.sfx("lose")
 			Audio.buzz(200))
@@ -1112,6 +1156,7 @@ func stuck_reset(is_bot: bool) -> void:
 		else:
 			combo = 0
 			scoring.combo = 0
+			_update_combo()
 			render_board()
 			refill_async(func(): send_state({"reset": true})))
 
@@ -1392,3 +1437,137 @@ func on_net(m: Dictionary) -> bool:
 				_show_overlay(ov_duel)
 				return true
 	return false
+
+
+# ---------- Серия комбо на экране ----------
+## Свободная полоса между счётом и полем в «Классике» и вызове дня
+func _combo_room() -> float:
+	return 36.0 if mode == "classic" or mode == "daily" else 0.0
+
+
+func _update_combo() -> void:
+	if mode == "arcade":
+		combo_pill.set_state(0, 0)
+		return
+	combo_pill.position = board_view.global_position - global_position + Vector2(board_view.size.x * 0.5, -8 - _combo_room() * 0.6)
+	combo_pill.set_state(scoring.combo, scoring.moves_left())
+
+
+## Плашка над полем: «Комбо ×N» и три точки — сколько ходов осталось, чтобы продлить серию
+class ComboPill extends Control:
+	var combo := 0
+	var left := 0
+
+	func _init() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		z_index = 5
+		visible = false
+
+	func set_state(c: int, l: int) -> void:
+		var grew := c > combo
+		var changed := c != combo or l != left
+		combo = c
+		left = l
+		visible = c > 0
+		if not changed:
+			return
+		queue_redraw()
+		if grew:
+			scale = Vector2.ONE * 1.35
+			create_tween().tween_property(self, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	func _draw() -> void:
+		if combo <= 0:
+			return
+		var f: Font = UI.F_BLACK
+		var fs := 26
+		var txt := tr("Комбо ×%d") % combo
+		var tw := f.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+		var w := tw + 3 * 22 + 46
+		var r := Rect2(-w / 2, -22, w, 44)
+		var hot := left <= 1   # последний ход, чтобы продлить серию
+		Skins.rrect(self, r, Color(0.05, 0.06, 0.16, 0.92), 22)
+		draw_string(f, Vector2(r.position.x + 18, 9), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, BB.C_GOLD)
+		for k in 3:
+			var c := Color(1, 1, 1, 0.22)
+			if k < left:
+				c = Color("ff6b5e") if hot else BB.C_GREEN
+			draw_circle(Vector2(r.position.x + 18 + tw + 22 + k * 22, 0), 7, c)
+
+
+# ---------- Продолжение партии «Классики» ----------
+func _save_run() -> void:
+	if mode != "classic" or finished:
+		return
+	var b := []
+	for c in board:
+		b.append(null if c == null else c.c.to_html())
+	var ps := []
+	for p in pieces:
+		ps.append(null if p == null else [p.s, p.color.to_html()])
+	Save.run = {"board": b, "pieces": ps, "score": score, "combo": scoring.combo, "miss": scoring.miss,
+		"since": gen.since, "revive": revive_used, "best0": best_at_start, "rec": record_shown}
+
+
+func _load_run(r: Dictionary) -> bool:
+	var b: Array = r.get("board", [])
+	var ps: Array = r.get("pieces", [])
+	if b.size() != N * N or ps.size() != 3:
+		return false
+	var loaded := []
+	for i in N * N:
+		loaded.append(null if b[i] == null else {"c": Color.html(str(b[i])), "f": ""})
+	var set := [null, null, null]
+	for i in 3:
+		if ps[i] != null and int(ps[i][0]) < BB.SHAPES.size():
+			set[i] = new_piece(int(ps[i][0]))
+			set[i].color = Color.html(str(ps[i][1]))
+	var bb := bits(loaded)
+	if not set.any(func(x): return x != null and BBAI.fits_anywhere(bb, x)):
+		return false
+	board = loaded
+	pieces = set
+	score = int(r.get("score", 0))
+	shown_score = score
+	scoring.score = score
+	scoring.combo = int(r.get("combo", 0))
+	scoring.miss = int(r.get("miss", 0))
+	combo = scoring.combo
+	gen.since = int(r.get("since", 0))
+	revive_used = bool(r.get("revive", false))
+	best_at_start = int(r.get("best0", Save.best))
+	record_shown = bool(r.get("rec", false))
+	return true
+
+
+# ---------- Второй шанс ----------
+## Раз за партию: убираем три самых заполненных ряда и три столбца, даём новые фигуры
+func revive() -> void:
+	if not finished or mode != "classic" or revive_used:
+		return
+	revive_used = true
+	finished = false
+	hide_overlays()
+	board_view.reset_fx()
+	var b := bits(board)
+	var rows := []
+	var cols := []
+	for i in N:
+		rows.append([BBAI.popcount(b & BBAI.ROW[i]), BBAI.ROW[i]])
+		cols.append([BBAI.popcount(b & BBAI.COL[i]), BBAI.COL[i]])
+	rows.sort_custom(func(x, y): return x[0] > y[0])
+	cols.sort_custom(func(x, y): return x[0] > y[0])
+	var mask := 0
+	for k in 3:
+		mask |= int(rows[k][1]) | int(cols[k][1])
+	for idx in mask_indices(mask & b):
+		var delay := (idx / N) * 0.04
+		board_view.anim_clear(idx, board[idx], delay)
+		fx.burst(board_view.cell_center_global(idx), board[idx].c, 5, delay)
+		board[idx] = null
+	render_board()
+	Audio.sfx("perfect")
+	Audio.buzz([30, 40, 80])
+	float_text(tr("Второй шанс!"), tr("поле расчищено"), 3, true)
+	_update_combo()
+	refill_async(_save_run)

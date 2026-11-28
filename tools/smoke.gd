@@ -327,6 +327,43 @@ func _run() -> void:
 	Save.bg_theme = "night"
 	main.queue_redraw()
 
+	# Удержание: серия комбо, полоска рекорда, продолжение партии, второй шанс
+	Save.best = 500
+	g.start_game("classic")
+	await wait(0.4)
+	for k in 12:
+		await play_one(g)
+	await wait(0.6)
+	var run_score := g.score
+	var run_bits := GameScreen.bits(g.board)
+	check(not Save.run.is_empty(), "run: saved after moves")
+	check(is_instance_valid(g.rec_bar), "record bar shown")
+	check(g.combo_pill.visible == (g.scoring.combo > 0), "combo pill follows the streak (combo %d)" % g.scoring.combo)
+	await shot("29_combo")
+	g.leave_game()
+	main.show_screen("menu")
+	await wait(0.3)
+	g.start_game("classic", 1, true)
+	await wait(0.9)
+	check(g.score == run_score and GameScreen.bits(g.board) == run_bits, "run: resumed with the same board and score")
+	await shot("30_resume")
+	for i in 64:
+		g.board[i] = {"c": BB.COLORS[0], "f": ""} if (i / 8 + i % 8) % 2 == 0 else null
+	g.pieces = [g.new_piece(BBAI.BIG[0]), null, null]
+	g.render_board()
+	g._after_move(0.0, {"placed": [], "cleared": [], "gained": 0, "n": 0})
+	await wait(2.2)
+	check(g.finished and g.ov_lose.root.visible and g.ov_lose.revive.visible, "lose: second chance offered")
+	check(Save.run.is_empty(), "run: cleared on loss")
+	await shot("31_second_chance")
+	g.revive()
+	await wait(1.6)
+	check(not g.finished and g.revive_used and g.pieces.any(func(x): return x != null), "revive: game continues")
+	check(not Save.run.is_empty(), "revive: run saved again")
+	await shot("32_revived")
+	g.leave_game()
+	main.show_screen("menu")
+
 	# Лучшие игроки (без сервера — сообщение о связи)
 	main.open_top()
 	await wait(13.0)   # подключение до 6 с + ответ до 5 с
