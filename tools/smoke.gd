@@ -431,6 +431,24 @@ func _run() -> void:
 	main._go_back()
 	check(main.current == "menu", "back: one press (double signal) goes to menu, not out of the game")
 
+	# Копия прогресса: выгрузка → JSON → загрузка не меняет ни значений, ни типов
+	var snap := Save.export_all()
+	var before_best: int = Save.best
+	var back = JSON.parse_string(JSON.stringify(snap))
+	Save.best = 1
+	Save.import_all(back)
+	check(Save.best == before_best and typeof(Save.get_v("best")) == TYPE_INT, "backup: numbers survive the round trip as integers")
+	check(JSON.stringify(Save.export_all()) == JSON.stringify(snap), "backup: export → import → export is identical")
+	check(not snap.has("ev_q") and not snap.has("server") and snap.has("pid"), "backup: local-only keys stay on the device")
+	main.open_backup()
+	await wait(0.4)
+	check(main.bk_get.visible and not main.bk_copy.visible, "backup: screen offers a code when there is none")
+	main.bk_in.text = "abcd"
+	main.do_restore()
+	check(main.bk_status.text != "", "backup: short code is rejected with a hint")
+	await shot("37_backup")
+	main.show_screen("menu")
+
 	# Лучшие игроки (без сервера — сообщение о связи)
 	main.open_top()
 	await wait(13.0)   # подключение до 6 с + ответ до 5 с

@@ -31,6 +31,17 @@ var login_root: Control
 var login_grid: GridContainer
 var login_btn: Button
 var season_l: Label
+var cloud_btn: Button
+var cloud_dot: Control
+var bk_code_l: Label
+var bk_note: Label
+var bk_get: Button
+var bk_copy: Button
+var bk_in: LineEdit
+var bk_restore: Button
+var bk_status: Label
+var _restore_armed := ""        ## код, для которого уже спросили подтверждение
+var _bk_busy := false
 var upd_btn: Button             ## «Есть обновление» — когда сервер знает сборку новее
 var _ev_busy := false
 var season := {}                ## {id, left} с сервера: текущий сезон и секунд до конца
@@ -105,6 +116,7 @@ func _ready() -> void:
 	_build_levels()
 	_build_collection()
 	_build_missions()
+	_build_backup()
 	_build_online()
 	_build_top()
 	game = GameScreen.new()
@@ -353,6 +365,12 @@ func _build_menu() -> void:
 		I18N.apply(langs[(langs.find(I18N.current()) + 1) % langs.size()])
 		update_menu())
 	row2.add_child(lang_btn)
+	cloud_btn = Widgets.Toggle.new("☁️")
+	cloud_btn.pressed.connect(func():
+		Audio.sfx("click")
+		open_backup())
+	row2.add_child(cloud_btn)
+	cloud_dot = _dot(cloud_btn)
 	var help := Widgets.Toggle.new("❓")
 	help.pressed.connect(func():
 		Audio.sfx("click")
@@ -390,6 +408,10 @@ func update_menu() -> void:
 	mis_btn.text = tr("🎯 Задания %d/3") % Missions.done_count()
 	lang_btn.text = I18N.current().to_upper()
 	mis_dot.visible = Missions.chest_ready()
+	# Точка на облаке: есть что терять (уровень 3+), а кода восстановления ещё нет
+	cloud_dot.visible = Save.get_v("backup_code", "") == "" and Missions.level_info().level >= 3
+	cloud_dot.position = Vector2(68, 8)
+	auto_backup()
 	upd_btn.visible = int(Save.get_v("latest", 0)) > BB.BUILD
 	var li := Missions.level_info()
 	lvl_l.text = tr("⭐ Ур. %d") % li.level
@@ -789,6 +811,140 @@ func open_chest() -> void:
 	_update_chest()
 
 
+# ---------- Копия прогресса: код восстановления ----------
+func _build_backup() -> void:
+	var s := _screen("backup")
+	var v := UI.center_box(s, 20)
+	v.add_child(UI.label("Сохранение прогресса ☁️", 46, Color.WHITE, UI.F_BLACK))
+	bk_note = UI.label("", 25, Color(1, 1, 1, 0.65), UI.F_REG)
+	bk_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	bk_note.custom_minimum_size = Vector2(600, 0)
+	v.add_child(UI.centered(bk_note))
+	bk_code_l = UI.label("", 50, BB.C_GOLD, UI.F_BLACK)
+	bk_code_l.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	v.add_child(bk_code_l)
+	bk_get = UI.big_button("Получить код", "нужен интернет", BB.C_GOLD)
+	bk_get.pressed.connect(func(): do_backup(true))
+	v.add_child(UI.centered(bk_get))
+	bk_copy = UI.button("📋 Скопировать код", Color(1, 1, 1, 0.14), Color.WHITE, 26, Vector2(0, 66))
+	_pad(bk_copy, 28)
+	bk_copy.pressed.connect(func():
+		DisplayServer.clipboard_set(str(Save.get_v("backup_code", "")))
+		toast(tr("Код скопирован. Сохрани его там, где не потеряешь")))
+	v.add_child(UI.centered(bk_copy))
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(0, 26)
+	v.add_child(gap)
+	v.add_child(UI.label("Вернуть прогресс по коду", 30, Color.WHITE, UI.F_BLACK))
+	bk_in = LineEdit.new()
+	bk_in.placeholder_text = "XXXX-XXXX-XXXX"
+	bk_in.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bk_in.max_length = 20
+	bk_in.custom_minimum_size = Vector2(440, 84)
+	bk_in.add_theme_font_size_override("font_size", 34)
+	bk_in.text_changed.connect(func(_t: String): _restore_armed = "")
+	v.add_child(UI.centered(bk_in))
+	bk_restore = UI.button("Вернуть прогресс", Color(1, 1, 1, 0.14), Color.WHITE, 28, Vector2(360, 76))
+	bk_restore.pressed.connect(do_restore)
+	v.add_child(UI.centered(bk_restore))
+	bk_status = UI.label("", 25, Color(1, 1, 1, 0.75), UI.F_REG)
+	bk_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	bk_status.custom_minimum_size = Vector2(600, 70)
+	v.add_child(UI.centered(bk_status))
+	_back_button(s, func(): show_screen("menu"))
+
+
+func open_backup() -> void:
+	_restore_armed = ""
+	bk_in.text = ""
+	bk_status.text = ""
+	_refresh_backup()
+	show_screen("backup")
+
+
+func _refresh_backup() -> void:
+	var code := str(Save.get_v("backup_code", ""))
+	bk_code_l.text = code
+	bk_code_l.visible = code != ""
+	bk_copy.visible = code != ""
+	bk_get.visible = code == ""
+	bk_restore.text = tr("Вернуть прогресс")
+	if code == "":
+		bk_note.text = tr("Получи код восстановления. С ним прогресс, коллекцию и рейтинг можно вернуть на другом телефоне или после переустановки игры.")
+	else:
+		bk_note.text = tr("Твой код восстановления. Запиши его и никому не показывай: с ним можно забрать весь прогресс. Копия обновляется сама, пока есть интернет.")
+
+
+## Отправить копию прогресса на сервер. loud — по кнопке: показываем результат
+func do_backup(loud := false) -> void:
+	if _bk_busy:
+		return
+	_bk_busy = true
+	if loud:
+		bk_status.text = tr("Сохраняем…")
+	var r: Dictionary = await Net.request(Save.server, {"t": "backup", "id": Save.player_id, "data": JSON.stringify(Save.export_all())}, "backupOk", 6.0)
+	_bk_busy = false
+	if r.is_empty():
+		if loud:
+			bk_status.text = tr("Не получилось: нет интернета или сервер недоступен")
+		return
+	Save.set_v("backup_code", str(r.get("code", "")))
+	Save.set_v("backup_at", Time.get_unix_time_from_system())
+	if loud:
+		bk_status.text = ""
+		Audio.sfx("record")
+		_refresh_backup()
+
+
+## Копия обновляется сама: не чаще раза в 5 минут и только если код уже получен
+func auto_backup() -> void:
+	if Save.get_v("backup_code", "") == "" or "--test-save" in OS.get_cmdline_user_args():
+		return
+	if Time.get_unix_time_from_system() - float(Save.get_v("backup_at", 0)) < 300:
+		return
+	do_backup(false)
+
+
+## Вернуть прогресс по коду. Первое нажатие спрашивает подтверждение: текущий прогресс заменится
+func do_restore() -> void:
+	# Код можно ввести как угодно: строчными, с пробелами или без дефисов
+	var rx := RegEx.create_from_string("[^A-Z0-9]")
+	var code := rx.sub(bk_in.text.to_upper(), "", true)
+	if code.length() != 12:
+		bk_status.text = tr("Введи код целиком: 12 букв и цифр")
+		return
+	if _restore_armed != code:
+		_restore_armed = code
+		bk_restore.text = tr("Да, заменить прогресс")
+		bk_status.text = tr("Прогресс на этом телефоне будет заменён сохранённым. Нажми ещё раз, чтобы подтвердить.")
+		return
+	bk_status.text = tr("Загружаем…")
+	var r: Dictionary = await Net.request(Save.server, {"t": "restore", "code": code}, "restoreData", 6.0)
+	_restore_armed = ""
+	bk_restore.text = tr("Вернуть прогресс")
+	if r.is_empty():
+		bk_status.text = tr("Не получилось: нет интернета или сервер недоступен")
+		return
+	if r.has("err"):
+		bk_status.text = tr("Слишком много попыток. Попробуй через час") if r.err == "tooMany" else tr("Такого кода нет. Проверь буквы и цифры")
+		return
+	var d = JSON.parse_string(str(r.get("data", "")))
+	if not (d is Dictionary) or not d.has("pid"):
+		bk_status.text = tr("Копия повреждена, прогресс не изменён")
+		return
+	Save.import_all(d)
+	# Код, которым восстановились, остаётся кодом этого телефона: копия продолжит обновляться
+	Save.set_v("backup_code", "%s-%s-%s" % [code.substr(0, 4), code.substr(4, 4), code.substr(8, 4)])
+	Save.set_v("backup_at", Time.get_unix_time_from_system())
+	Net.close()
+	I18N.apply(I18N.current())
+	if get_tree().current_scene == self:
+		# Перезапускаем игру, чтобы все экраны прочитали новый прогресс
+		get_tree().reload_current_scene()
+	else:
+		show_screen("menu")   # проверочные сцены: главный экран вложен в сцену теста
+
+
 # ---------- Награда за вход ----------
 func _build_login() -> void:
 	login_root = Control.new()
@@ -1184,7 +1340,7 @@ func _on_net(m: Dictionary) -> void:
 			lobby_view("search")
 			set_lobby_status("")
 			return
-		"profile", "dailyTop", "topList", "evAck":
+		"profile", "dailyTop", "topList", "evAck", "backupOk", "restoreData":
 			return   # ответы на запросы (Net.request)
 		"error":
 			if current == "online":

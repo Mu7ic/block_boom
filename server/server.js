@@ -30,8 +30,8 @@ const DAILY_TOP = 10;
 // ---------- Хранилище: профили (рейтинг) и таблицы дня ----------
 // Игрок опознаётся по случайному токену, который клиент создаёт сам и хранит у себя.
 // Токен никому не показывается: в таблицах только имена и очки.
-let db = { players: {}, daily: {}, act: {}, stats: {} };
-try { db = { players: {}, daily: {}, act: {}, stats: {}, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }; } catch (e) { /* первый запуск */ }
+let db = { players: {}, daily: {}, act: {}, stats: {}, backups: {}, codes: {} };
+try { db = { players: {}, daily: {}, act: {}, stats: {}, backups: {}, codes: {}, ...JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')) }; } catch (e) { /* первый запуск */ }
 let saveTimer = null;
 function saveDb() {
   if (saveTimer) return;
@@ -45,6 +45,32 @@ function saveDb() {
   }, 1000);
 }
 const validId = id => typeof id === 'string' && /^[a-f0-9]{16,64}$/.test(id);
+
+// ---------- Копия прогресса и код восстановления ----------
+// db.backups[id] = { data: строка JSON с сохранением игры, at: время, code }
+// db.codes[code] = id. Код — как пароль: кто его знает, тот забирает прогресс и рейтинг.
+const BACKUP_MAX = 16000;                              // символов в копии
+const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // без похожих O/0, I/1
+const RESTORE_TRIES_PER_HOUR = 10;                     // попыток ввести код с одного IP
+const restoreTries = new Map();                        // ip → [время попыток]
+function newBackupCode() {
+  let c;
+  do {
+    const b = crypto.randomBytes(12);
+    c = Array.from(b, x => CODE_ABC[x % 32]).join('');
+  } while (db.codes[c]);
+  return c;
+}
+const fmtCode = c => c.match(/.{4}/g).join('-');
+const normCode = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+function restoreAllowed(ip) {
+  const now = Date.now();
+  const t = (restoreTries.get(ip) || []).filter(x => now - x < 3600000);
+  if (t.length >= RESTORE_TRIES_PER_HOUR) { restoreTries.set(ip, t); return false; }
+  t.push(now);
+  restoreTries.set(ip, t);
+  return true;
+}
 
 // ---------- Защита от накруток ----------
 // 1. Договорные бои: одна и та же пара разыгрывает рейтинг не больше PAIR_RATED_PER_DAY раз в день,
@@ -581,6 +607,31 @@ wss.on('connection', (ws, req) => {
         m.ip = ws.ip;
         trackEvents(m);
         send(ws, { t: 'evAck', latest: LATEST.code });
+        break;
+      }
+      case 'backup': {
+        // Сохранить копию прогресса; в ответ — код восстановления (один на игрока, не меняется)
+        if (!validId(m.id) || typeof m.data !== 'string' || m.data.length > BACKUP_MAX) return send(ws, { t: 'error', msg: 'Копия не сохранена' });
+        try { if (typeof JSON.parse(m.data) !== 'object') throw 0; } catch (e) { return send(ws, { t: 'error', msg: 'Копия не сохранена' }); }
+        let b = db.backups[m.id];
+        if (!b) {
+          if (!allowNewId(ws.ip)) return send(ws, { t: 'error', msg: 'Копия не сохранена' });
+          b = db.backups[m.id] = { code: newBackupCode() };
+          db.codes[b.code] = m.id;
+        }
+        b.data = m.data;
+        b.at = Date.now();
+        saveDb();
+        send(ws, { t: 'backupOk', code: fmtCode(b.code) });
+        break;
+      }
+      case 'restore': {
+        // Вернуть прогресс по коду
+        if (!restoreAllowed(ws.ip)) return send(ws, { t: 'restoreData', err: 'tooMany' });
+        const id = db.codes[normCode(m.code)];
+        const b = id && db.backups[id];
+        if (!b) return send(ws, { t: 'restoreData', err: 'notFound' });
+        send(ws, { t: 'restoreData', data: b.data, at: b.at });
         break;
       }
       case 'emoji': {

@@ -60,6 +60,44 @@ var unlocked: int:
 	set(v): set_v("unlocked", v)
 
 
+# ---------- Копия прогресса (код восстановления) ----------
+## Что не переносится на другой телефон: очереди отправки, адрес сервера, служебные отметки
+const LOCAL_KEYS := ["ev_q", "latest", "server", "daily_pending", "run", "backup_at"]
+
+
+## Весь прогресс одним словарём — для копии на сервере
+func export_all() -> Dictionary:
+	var d := {}
+	for k in _cfg.get_section_keys("save"):
+		if not LOCAL_KEYS.has(k):
+			d[k] = _cfg.get_value("save", k)
+	return d
+
+
+## Заменить прогресс копией с сервера. JSON не различает 3 и 3.0 — целые возвращаем целыми.
+func import_all(d: Dictionary) -> void:
+	for k in _cfg.get_section_keys("save"):
+		if not LOCAL_KEYS.has(k):
+			_cfg.erase_section_key("save", k)
+	for k in d:
+		if not LOCAL_KEYS.has(k):
+			_cfg.set_value("save", str(k), _ints(d[k]))
+	_cfg.save(_path)
+
+
+static func _ints(v):
+	if v is float and v == floorf(v) and absf(v) < 9e15:
+		return int(v)
+	if v is Array:
+		return v.map(func(x): return _ints(x))
+	if v is Dictionary:
+		var o := {}
+		for k in v:
+			o[k] = _ints(v[k])
+		return o
+	return v
+
+
 # ---------- Вызов дня без сети ----------
 ## Результат, который не удалось отправить: {day, score}. Уйдёт в таблицу, когда появится интернет.
 var daily_pending: Dictionary:
