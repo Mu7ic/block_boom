@@ -1380,6 +1380,12 @@ func start_online_match(m: Dictionary) -> void:
 	opp_name = str(m.get("opponent", tr("Соперник"))).substr(0, 16)
 	ranked = bool(m.get("ranked", false))
 	start_game("online")
+	# Быстрый бой может идти без рейтинга — сервер сообщает почему
+	var why := str(m.get("why", ""))
+	if why == "sameNet":
+		later(4.0, func(): main.toast(tr("Вы с соперником в одной сети — этот бой без рейтинга")))
+	elif why == "pairLimit":
+		later(4.0, func(): main.toast(tr("С этим соперником рейтинг сегодня уже разыгран — бой без рейтинга")))
 	_new_bot(false)
 	render_bot()
 	bot_head.text = ("⚡ " if ranked else "🧑 ") + opp_name

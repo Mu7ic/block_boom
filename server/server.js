@@ -45,10 +45,89 @@ function saveDb() {
   }, 1000);
 }
 const validId = id => typeof id === 'string' && /^[a-f0-9]{16,64}$/.test(id);
-function profile(id, name) {
+
+// ---------- Защита от накруток ----------
+// 1. Договорные бои: одна и та же пара разыгрывает рейтинг не больше PAIR_RATED_PER_DAY раз в день,
+//    а бой двух игроков с одного IP (одна сеть, два своих телефона) идёт без рейтинга.
+// 2. Счёт: сервер ведёт серию комбо и число клеток на поле каждого игрока и не принимает ход,
+//    который даёт больше очков, чем возможно по правилам (см. checkMove).
+// 3. Частота: ограничены соединения и сообщения с одного IP, новые профили и результаты вызова дня.
+const PAIR_RATED_PER_DAY = 3;
+const MAX_CONN_PER_IP = Number(process.env.MAX_CONN_PER_IP) || 12;
+const MAX_MSG_PER_10S = 80;          // сообщений с одного соединения за 10 секунд
+const MAX_NEW_IDS_PER_IP_DAY = Number(process.env.MAX_NEW_IDS_PER_IP_DAY) || 20;
+const MIN_MOVE_MS = 150;             // в среднем быстрее человек фигуры не ставит
+const MOVE_BURST = 4;                // столько ходов может прийти подряд без паузы
+const DAILY_MAX_SCORE = 3000000;     // выше в вызове дня честно не набрать
+const DAILY_MIN_GAP = 8000;          // результат вызова дня — не чаще раза в 8 секунд
+const SCORE = { cell: 10, line: 100, perfect: 3000, grace: 3 };   // как в scripts/scoring.gd
+
+const pairRated = {};    // день → { 'idA|idB': число рейтинговых боёв }
+const newIds = {};       // день → { ip: число новых профилей }
+const connByIp = new Map();
+const pairKey = (a, b) => [a.pid, b.pid].sort().join('|');
+function bump(table, key) {
+  const day = dayStr();
+  for (const d of Object.keys(table)) if (d !== day) delete table[d];
+  const t = table[day] || (table[day] = {});
+  return (t[key] = (t[key] || 0) + 1);
+}
+const peek = (table, key) => (table[dayStr()] || {})[key] || 0;
+
+// Почему бой этой пары не идёт в рейтинг ('' — идёт)
+function unrankedWhy(a, b) {
+  if (a.ip && a.ip === b.ip) return 'sameNet';
+  if (peek(pairRated, pairKey(a, b)) >= PAIR_RATED_PER_DAY) return 'pairLimit';
+  return '';
+}
+
+// Новый профиль с этого IP: false — лимит на сегодня исчерпан
+function allowNewId(ip) {
+  if (!ip) return true;
+  if (peek(newIds, ip) >= MAX_NEW_IDS_PER_IP_DAY) return false;
+  bump(newIds, ip);
+  return true;
+}
+
+// Проверка хода в бою. st — состояние игрока на сервере:
+// { score: принятый счёт, claimed: счёт со слов клиента, combo, miss, cnt: клеток на поле, at }.
+// Сервер сам копит счёт: за ход прибавляет не больше, чем возможно по правилам. Невозможный ход
+// очков не даёт, но бой продолжается — случайный сбой стоит одного хода, а не всей игры.
+function checkMove(st, m, now) {
+  const claimed = Math.floor(Number(m.score)) || 0;
+  const gain = Math.max(0, claimed - st.claimed);
+  st.claimed = Math.max(st.claimed, claimed);
+  const board = Array.isArray(m.board) && m.board.length === 64 ? m.board : null;
+  const cnt = board ? board.filter(c => c).length : st.cnt;
+  const before = st.cnt;
+  st.cnt = cnt;
+  if (m.reset) { st.combo = 0; st.miss = 0; return gain === 0; }   // нет ходов — поле очищено, очков за это нет
+  if (!Array.isArray(m.placed)) return gain === 0;                 // сообщение без хода (начало боя)
+  const p = m.placed.length, c = Array.isArray(m.cleared) ? m.cleared.length : 0, n = Math.floor(Number(m.n)) || 0;
+  // Темп: в среднем не чаще хода в MIN_MOVE_MS. Соседние сообщения могут прийти вплотную
+  // (клиент шлёт ход после подбора новых фигур), поэтому считаем запас, а не паузу между двумя ходами.
+  st.tok = Math.min(MOVE_BURST, st.tok + (now - st.at) / MIN_MOVE_MS);
+  st.at = now;
+  const fast = st.tok < 1;
+  if (!fast) st.tok -= 1;
+  let ok = p >= 1 && p <= 9 && n >= 0 && n <= 6 && !fast;
+  // n линий — это минимум 8n клеток минус пересечения строк со столбцами
+  if (n > 0 ? c < 8 * n - Math.floor(n / 2) * Math.ceil(n / 2) : c !== 0) ok = false;
+  if (board && cnt !== before + p - c) ok = false;                 // клетки не берутся из ниоткуда
+  if (!ok) { st.combo = 0; st.miss = 0; return gain === 0; }
+  if (n > 0) { st.combo++; st.miss = 0; } else if (++st.miss >= SCORE.grace) st.combo = 0;
+  const max = p * SCORE.cell + (n > 0 ? SCORE.line * n * (n + 1) / 2 * st.combo + (cnt === 0 ? SCORE.perfect : 0) : 0);
+  st.score += Math.min(gain, max);
+  return gain <= max;
+}
+function profile(id, name, ip) {
   if (!validId(id)) return null;
   let p = db.players[id];
-  if (!p) { p = db.players[id] = { name: 'Игрок', rating: START_RATING, games: 0, wins: 0 }; saveDb(); }
+  if (!p) {
+    if (!allowNewId(ip)) return null;
+    p = db.players[id] = { name: 'Игрок', rating: START_RATING, games: 0, wins: 0 };
+    saveDb();
+  }
   if (name && p.name !== name) { p.name = name; saveDb(); }
   rollSeason(p);
   return p;
@@ -156,6 +235,7 @@ const STATS_KEY = process.env.STATS_KEY || db.statsKey || (db.statsKey = crypto.
 const MODES = ['classic', 'daily', 'arcade', 'duel', 'online'];
 function trackEvents(m) {
   const today = dayStr(), minDay = dayStr(Date.now() - 7 * 86400000);
+  if (!db.act[m.id] && !allowNewId(m.ip)) return;
   const a = db.act[m.id] || (db.act[m.id] = { f: today, d: [] });
   for (const e of m.list.slice(0, 60)) {
     if (!e || typeof e !== 'object') continue;
@@ -286,11 +366,15 @@ function startMatch(room) {
   clearTimeout(room.endTimer);
   clearTimeout(room.waitTimer);
   room.state = 'playing';
+  // Рейтинговая комната может сыграть бой без рейтинга: одна сеть или лимит боёв этой пары на сегодня
+  const why = room.ranked ? unrankedWhy(room.players[0], room.players[1]) : '';
+  room.rated = !!room.ranked && !why;
+  room.check = new Map(room.players.map(p => [p, { score: 0, claimed: 0, combo: 0, miss: 0, cnt: 0, at: Date.now(), tok: MOVE_BURST, bad: 0 }]));
   room.scores = new Map(room.players.map(p => [p, 0]));
   room.ready = new Set();
   room.endAt = Date.now() + COUNTDOWN + DURATION;
   for (const p of room.players) {
-    send(p, { t: 'start', countdown: COUNTDOWN, duration: DURATION, opponent: other(room, p).name, ranked: !!room.ranked });
+    send(p, { t: 'start', countdown: COUNTDOWN, duration: DURATION, opponent: other(room, p).name, ranked: room.rated, why });
   }
   room.endTimer = setTimeout(() => finish(room), COUNTDOWN + DURATION + GRACE);
 }
@@ -301,7 +385,7 @@ function finish(room) {
   if (!a || !b) return;
   const sa = room.scores.get(a) || 0, sb = room.scores.get(b) || 0;
   const ra = {}, rb = {};
-  if (room.ranked) applyRating(a, b, sa > sb ? 1 : sa < sb ? 0 : 0.5, ra, rb);
+  if (room.rated) { applyRating(a, b, sa > sb ? 1 : sa < sb ? 0 : 0.5, ra, rb); bump(pairRated, pairKey(a, b)); }
   send(a, { t: 'end', you: sa, them: sb, ...ra });
   send(b, { t: 'end', you: sb, them: sa, ...rb });
 }
@@ -362,7 +446,7 @@ function leave(ws) {
     if (room.state === 'playing') {
       clearTimeout(room.endTimer);
       room.state = 'ended';
-      if (room.ranked) applyRating(rest, ws, 1, msg, {});   // вышел из рейтингового боя — поражение
+      if (room.rated) { applyRating(rest, ws, 1, msg, {}); bump(pairRated, pairKey(rest, ws)); }   // вышел из рейтингового боя — поражение
     }
     send(rest, msg);
   }
@@ -373,26 +457,42 @@ function leave(ws) {
   }
 }
 
-wss.on('connection', ws => {
+wss.on('connection', (ws, req) => {
   ws.alive = true;
   ws.on('pong', () => { ws.alive = true; });
+  // Сервер стоит за прокси (Caddy/nginx) и снаружи не виден, поэтому адрес игрока — в X-Forwarded-For
+  ws.ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+  const conns = (connByIp.get(ws.ip) || 0) + 1;
+  connByIp.set(ws.ip, conns);
+  ws.on('close', () => {
+    const left = (connByIp.get(ws.ip) || 1) - 1;
+    if (left > 0) connByIp.set(ws.ip, left); else connByIp.delete(ws.ip);
+  });
+  if (conns > MAX_CONN_PER_IP) { send(ws, { t: 'error', msg: 'Слишком много подключений' }); return ws.close(); }
+  ws.msgAt = Date.now();
+  ws.msgN = 0;
 
   ws.on('message', raw => {
+    // Не больше MAX_MSG_PER_10S сообщений за 10 секунд с одного соединения
+    const tnow = Date.now();
+    if (tnow - ws.msgAt > 10000) { ws.msgAt = tnow; ws.msgN = 0; }
+    if (++ws.msgN > MAX_MSG_PER_10S) return;
     let m;
     try { m = JSON.parse(raw); } catch (e) { return; }
+    if (!m || typeof m !== 'object') return;
     const room = ws.room;
 
     switch (m.t) {
       case 'hello': {
         // Профиль игрока: рейтинг и число боёв
-        const p = profile(m.id, m.name && cleanName(m.name));
+        const p = profile(m.id, m.name && cleanName(m.name), ws.ip);
         if (!p) return send(ws, { t: 'error', msg: 'Нет профиля' });
         ws.pid = m.id;
         send(ws, publicProfile(p));
         break;
       }
       case 'quick': {
-        const p = profile(m.id, cleanName(m.name));
+        const p = profile(m.id, cleanName(m.name), ws.ip);
         if (!p) return send(ws, { t: 'error', msg: 'Нет профиля' });
         leave(ws);
         ws.pid = m.id;
@@ -407,14 +507,19 @@ wss.on('connection', ws => {
         if (!validId(m.id)) return send(ws, { t: 'error', msg: 'Нет профиля' });
         const today = dayStr(), yesterday = dayStr(Date.now() - 86400000);
         const day = m.day === yesterday ? yesterday : today;   // партия могла начаться до полуночи
-        if (m.score !== undefined && m.score !== null) {
-          const score = Math.max(0, Math.min(1e7, Math.floor(Number(m.score) || 0)));
+        const raw = Math.floor(Number(m.score));
+        // Результат принимаем, если он правдоподобен, не слишком частый и профиль не из потока новых с одного IP
+        if (m.score !== undefined && m.score !== null && raw >= 0 && raw <= DAILY_MAX_SCORE
+            && Date.now() - (ws.dailyAt || 0) >= DAILY_MIN_GAP) {
           const b = db.daily[day] || (db.daily[day] = {});
           const e = b[m.id];
-          if (!e || score > e.score) b[m.id] = { name: cleanName(m.name), score };
-          else e.name = cleanName(m.name);
-          pruneDaily();
-          saveDb();
+          if (e || allowNewId(ws.ip)) {
+            ws.dailyAt = Date.now();
+            if (!e || raw > e.score) b[m.id] = { name: cleanName(m.name), score: raw };
+            else e.name = cleanName(m.name);
+            pruneDaily();
+            saveDb();
+          }
         }
         send(ws, dailyReply(day, m.id));
         break;
@@ -459,7 +564,13 @@ wss.on('connection', ws => {
         // Ход игрока: запоминаем очки и пересылаем поле сопернику
         if (!room || room.state !== 'playing') return;
         if (Date.now() > room.endAt + GRACE) return;
-        const score = Math.max(0, Math.floor(Number(m.score) || 0));
+        // Счёт принимаем, только если ход возможен по правилам; иначе остаётся последний честный
+        const st = room.check.get(ws);
+        if (!st) return;
+        if (!checkMove(st, m, Date.now())) {
+          if (++st.bad === 1 || process.env.BB_DEBUG) console.warn(`подозрительный ход: ${ws.name} (${ws.ip}) счёт ${m.score} при ${st.score}, n=${m.n} placed=${(m.placed || []).length} cleared=${(m.cleared || []).length} combo=${st.combo} cnt=${st.cnt}`);
+        }
+        const score = st.score;
         room.scores.set(ws, score);
         send(other(room, ws), { ...m, t: 'opp', score });
         break;
@@ -467,6 +578,7 @@ wss.on('connection', ws => {
       case 'ev': {
         // Обезличенные события игры (запуск, сыгранная партия) — для статистики
         if (!validId(m.id) || !Array.isArray(m.list)) return;
+        m.ip = ws.ip;
         trackEvents(m);
         send(ws, { t: 'evAck', latest: LATEST.code });
         break;

@@ -81,6 +81,8 @@ const EN := {
 	"Комбо ×%d": "Combo ×%d",
 	"💖 Второй шанс": "💖 Second chance",
 	"⭐ Ур. %d": "⭐ Lv. %d",
+	"Вы с соперником в одной сети — этот бой без рейтинга": "You and your rival are on the same network — this battle is unranked",
+	"С этим соперником рейтинг сегодня уже разыгран — бой без рейтинга": "You have already played your ranked battles with this rival today — this one is unranked",
 	"⬆ Есть обновление — скачать": "⬆ Update available — download",
 	"⭐ Уровень %d! +🔑": "⭐ Level %d! +🔑",
 	"Награда за вход 🎁": "Daily reward 🎁",
