@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Block Boom — скачать игру</title>
-<meta name="description" content="Block Boom — головоломка с блоками: классика, вызов дня, аркада с бесконечной картой, бои с ботом и онлайн с рейтингом.">
+<meta name="description" content="Block Boom — a block puzzle: classic mode, daily challenge, an endless arcade map, bot battles and ranked online play.">
 <meta property="og:title" content="Block Boom">
-<meta property="og:description" content="Головоломка с блоками и онлайн-бои с друзьями. Скачай для Android.">
-<meta property="og:image" content="https://kyrbo.com/blockboom/img/menu.webp">
+<meta property="og:description" content="A block puzzle with online battles against friends. Download for Android.">
+<meta property="og:image" content="https://kyrbo.com/blockboom/img/menu.webp?v=2">
 <meta name="theme-color" content="#2a2f73">
 <link rel="icon" href="img/icon.svg">
 <style>
@@ -17,7 +17,9 @@
   body { min-height:100vh; color:#fff; font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
          background:linear-gradient(160deg,var(--bg1),var(--bg2)) fixed; }
   a { color:inherit; }
-  .wrap { max-width:980px; margin:0 auto; padding:28px 20px 48px; }
+  .lang { position:absolute; top:16px; right:16px; z-index:2; border:0; border-radius:999px; padding:8px 16px;
+          background:rgba(255,255,255,.14); color:#fff; font:700 15px system-ui,sans-serif; cursor:pointer; }
+  .wrap { position:relative; max-width:980px; margin:0 auto; padding:28px 20px 48px; }
 
   /* Шапка */
   .hero { display:grid; grid-template-columns:1fr auto; gap:40px; align-items:center; padding:24px 0 8px; }
@@ -74,6 +76,7 @@
 </head>
 <body>
 <div class="wrap">
+  <button class="lang" id="lang" type="button">EN</button>
 
   <section class="hero">
     <div>
@@ -81,48 +84,86 @@
         <img src="img/icon.svg" alt="">
         <div class="title"><span>B</span><span>L</span><span>O</span><span>C</span><span>K</span><br><span hidden></span><span>B</span><span>O</span><span>O</span><span>M</span></div>
       </div>
-      <p class="tag">Ставь фигуры, собирай линии, взрывай блоки. Играй на рекорд, проходи бесконечную карту уровней и сражайся с друзьями онлайн.</p>
+      <p class="tag" data-i="tag">Ставь фигуры, собирай линии, взрывай блоки. Играй на рекорд, проходи бесконечную карту уровней и сражайся с друзьями онлайн.</p>
       <div class="btns">
         <a class="btn" id="dl" href="BlockBoom.apk" download="BlockBoom.apk">
           <span style="font-size:28px">🤖</span>
-          <span>Скачать для Android<small>APK · версия 1.0 · 55 МБ</small></span>
+          <span><span data-i="dl">Скачать для Android</span><small data-i="dlsub">APK · версия 1.0 · 55 МБ</small></span>
         </a>
-        <a class="btn alt" href="play/">🌐 Играть в браузере</a>
+        <a class="btn alt" href="play/" data-i="web">🌐 Играть в браузере</a>
       </div>
-      <p class="note" id="ios" hidden>На iPhone приложение пока не ставится — играйте в браузере, онлайн-бой там тоже работает.</p>
+      <p class="note" id="ios" data-i="ios" hidden>На iPhone приложение пока не ставится — играйте в браузере, онлайн-бой там тоже работает.</p>
     </div>
     <div class="qr">
       <img src="img/qr.svg" alt="QR-код">
-      <div>Наведи камеру телефона</div>
+      <div data-i="qr">Наведи камеру телефона</div>
     </div>
   </section>
 
   <div class="shots">
-    <figure><img src="img/menu.webp" alt="Меню" loading="lazy"><figcaption>5 режимов</figcaption></figure>
-    <figure><img src="img/classic.webp" alt="Классика" loading="lazy"><figcaption>Классика</figcaption></figure>
-    <figure><img src="img/arcade.webp" alt="Аркада" loading="lazy"><figcaption>Карта уровней</figcaption></figure>
-    <figure><img src="img/duel.webp" alt="Бой" loading="lazy"><figcaption>Бой на время</figcaption></figure>
+    <figure><img src="img/menu.webp?v=2" alt="Меню" loading="lazy"><figcaption data-i="s1">5 режимов</figcaption></figure>
+    <figure><img src="img/classic.webp?v=2" alt="Классика" loading="lazy"><figcaption data-i="s2">Классика</figcaption></figure>
+    <figure><img src="img/arcade.webp?v=2" alt="Аркада" loading="lazy"><figcaption data-i="s3">Карта уровней</figcaption></figure>
+    <figure><img src="img/duel.webp?v=2" alt="Бой" loading="lazy"><figcaption data-i="s4">Бой на время</figcaption></figure>
   </div>
 
-  <h2>Как установить на телефон</h2>
+  <h2 data-i="how">Как установить на телефон</h2>
   <ol class="steps">
-    <li>Нажми <b>«Скачать для Android»</b> и дождись загрузки.</li>
-    <li>Открой скачанный файл <b>BlockBoom.apk</b> — из шторки уведомлений или из «Загрузок».</li>
-    <li>Если телефон спросит, разреши браузеру <b>установку неизвестных приложений</b> и нажми «Установить».</li>
+    <li data-i="st1">Нажми <b>«Скачать для Android»</b> и дождись загрузки.</li>
+    <li data-i="st2">Открой скачанный файл <b>BlockBoom.apk</b> — из шторки уведомлений или из «Загрузок».</li>
+    <li data-i="st3">Если телефон спросит, разреши браузеру <b>установку неизвестных приложений</b> и нажми «Установить».</li>
   </ol>
-  <p class="note">Игра тестовая, поэтому её пока нет в Google Play. Новую версию ставь поверх старой — прогресс сохранится.</p>
+  <p class="note" data-i="beta">Игра тестовая, поэтому её пока нет в Google Play. Новую версию ставь поверх старой — прогресс сохранится.</p>
 
-  <h2>Что внутри</h2>
+  <h2 data-i="inside">Что внутри</h2>
   <div class="grid">
-    <div class="card"><div class="ico">🏆</div><b>Онлайн-бой</b>Быстрый поиск соперника, рейтинг и лиги от Бронзы до Алмаза. Или комната по коду для друзей.</div>
-    <div class="card"><div class="ico">📅</div><b>Вызов дня</b>Одни фигуры для всех игроков — сравни результат в таблице дня.</div>
-    <div class="card"><div class="ico">🍓</div><b>Аркада</b>Бесконечная карта: миры по 10 уровней, боссы и звёзды за каждый уровень.</div>
-    <div class="card"><div class="ico">🎨</div><b>Коллекция</b>20 стилей блоков, эффекты взрывов и фоны. Задания дня и сундук с наградами.</div>
+    <div class="card"><div class="ico">🏆</div><span data-i="f1"><b>Онлайн-бой</b>Быстрый поиск соперника, рейтинг и лиги от Бронзы до Алмаза. Или комната по коду для друзей.</span></div>
+    <div class="card"><div class="ico">📅</div><span data-i="f2"><b>Вызов дня</b>Одни фигуры для всех игроков — сравни результат в таблице дня.</span></div>
+    <div class="card"><div class="ico">🍓</div><span data-i="f3"><b>Аркада</b>Бесконечная карта: миры по 10 уровней, боссы и звёзды за каждый уровень.</span></div>
+    <div class="card"><div class="ico">🎨</div><span data-i="f4"><b>Коллекция</b>20 стилей блоков, эффекты взрывов и фоны. Задания дня и сундук с наградами.</span></div>
   </div>
 
   <footer>Block Boom · kyrbo.com</footer>
 </div>
 <script>
+  const EN = {
+    title: 'Block Boom — download the game',
+    tag: 'Place pieces, clear lines, blow up blocks. Play for a high score, travel an endless level map and battle friends online.',
+    dl: 'Download for Android',
+    dlsub: 'APK · version 1.0 · 55 MB',
+    web: '🌐 Play in browser',
+    ios: 'The app is not available for iPhone yet — play in the browser, online battles work there too.',
+    qr: 'Point your phone camera',
+    s1: '5 modes', s2: 'Classic', s3: 'Level map', s4: 'Timed battle',
+    how: 'How to install on your phone',
+    st1: 'Tap <b>“Download for Android”</b> and wait for the download.',
+    st2: 'Open <b>BlockBoom.apk</b> from the notification shade or from Downloads.',
+    st3: 'If your phone asks, allow the browser to <b>install unknown apps</b> and tap “Install”.',
+    beta: 'This is a test build, so it is not on Google Play yet. Install new versions over the old one — your progress is kept.',
+    inside: 'What’s inside',
+    f1: '<b>Online battle</b>Quick match, rating and leagues from Bronze to Diamond. Or a room code to play with friends.',
+    f2: '<b>Daily challenge</b>The same pieces for everyone — compare your score on the daily leaderboard.',
+    f3: '<b>Arcade</b>An endless map: worlds of 10 levels, bosses and stars for every level.',
+    f4: '<b>Collection</b>20 block styles, blast effects and backgrounds. Daily missions and a reward chest.',
+  };
+  const RU = { title: document.title };
+  document.querySelectorAll('[data-i]').forEach(el => RU[el.dataset.i] = el.innerHTML);
+
+  function setLang(lang) {
+    const d = lang === 'en' ? EN : RU;
+    document.querySelectorAll('[data-i]').forEach(el => el.innerHTML = d[el.dataset.i]);
+    document.title = d.title;
+    document.documentElement.lang = lang;
+    document.getElementById('lang').textContent = lang === 'en' ? 'RU' : 'EN';
+    try { localStorage.setItem('bb-lang', lang); } catch (e) {}
+  }
+  // Язык: английский по умолчанию, русский — если его выбрали кнопкой
+  let lang = null;
+  try { lang = localStorage.getItem('bb-lang'); } catch (e) {}
+  if (lang !== 'ru') lang = 'en';
+  setLang(lang);
+  document.getElementById('lang').onclick = () => setLang(document.documentElement.lang === 'en' ? 'ru' : 'en');
+
   // На iPhone APK не нужен: делаем главной кнопку «Играть в браузере»
   if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
     document.getElementById('dl').style.display = 'none';

@@ -252,7 +252,7 @@ static func setup() -> void:
 static func current() -> String:
 	var l: String = Save.get_v("lang", "")
 	if l == "":
-		l = "ru" if OS.get_locale_language() in ["ru", "uk", "be", "kk"] else "en"
+		l = "en"   # английский по умолчанию; русский — кнопкой RU/EN в меню
 	return l
 
 
