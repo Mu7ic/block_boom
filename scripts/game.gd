@@ -17,6 +17,7 @@ var board: Array = []
 var pieces: Array = [null, null, null]
 var score := 0
 var combo := 0
+var scoring := Scoring.new()          ## очки и серия комбо (scripts/scoring.gd)
 var goals: Array = []
 var finished := false
 var skin_idx := 0
@@ -556,6 +557,7 @@ func start_game(m: String, n := 1) -> void:
 	board.resize(N * N)
 	score = 0
 	combo = 0
+	scoring = Scoring.new()
 	finished = false
 	shown_score = 0
 	best_at_start = Save.best
@@ -723,8 +725,6 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 		var idx := (r + v.x) * N + c + v.y
 		board[idx] = {"c": p.color, "f": p.fruits[k]}
 		placed.append(idx)
-	var gained: int = p.cells.size()
-
 	var fl := BBAI.full_lines(bits(board))
 	var cleared := mask_indices(fl[0])
 	var n: int = fl[1]
@@ -733,6 +733,9 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 		old[idx] = board[idx]
 		board[idx] = null
 	var perfect := n > 0 and bits(board) == 0
+	var res := scoring.add(p.cells.size(), n, perfect and mode != "arcade")
+	var gained: int = res.gained
+	combo = res.combo
 
 	moves += 1
 	if moves_l:
@@ -743,7 +746,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 	Missions.add("pieces")
 	if n > 0:
 		Missions.add("lines", n)
-		Missions.reach("combo", combo + 1)
+		Missions.reach("combo", combo)
 		if n >= 3:
 			Missions.add("triple")
 		if perfect:
@@ -751,20 +754,13 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 
 	Audio.sfx("place")
 	if n > 0:
-		combo += 1
 		Audio.clear(n, combo)
 		Audio.buzz([30, 40, 80] if n >= 3 else 25)
 		if n >= 3:
 			Audio.sfx("mega")
-		var mega := 5 if n >= 3 else 1   # 3+ линии за ход — очки ×5
-		var bonus := n * n * 10 * combo * mega
-		gained += bonus
-		if perfect and mode != "arcade":
-			gained += 300
+		var bonus: int = res.bonus - (Scoring.PERFECT if perfect and mode != "arcade" else 0)
 		var praise := tr("Невероятно!") if n >= 4 else (tr("Отлично!") if n == 3 else (tr("Хорошо!") if n == 2 else ""))
 		var sub: Array[String] = []
-		if mode != "arcade" and mega > 1:
-			sub.append("×5!")
 		if mode != "arcade" and praise != "":
 			sub.append(praise)
 		if combo > 1:
@@ -781,7 +777,7 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 		if perfect:
 			later(0.5, func():
 				Audio.sfx("perfect")
-				float_text(tr("Чистое поле!"), "+300" if mode != "arcade" else "✨", 4, true))
+				float_text(tr("Чистое поле!"), "+%d" % Scoring.PERFECT if mode != "arcade" else "✨", 4, true))
 		if n >= 2 or perfect:
 			board_view.shake((2 + n * 2) * 1.8)
 		# 3 и больше линий за один ход — новый стиль блоков
@@ -794,7 +790,6 @@ func place(i: int, p: Dictionary, r: int, c: int) -> void:
 				Audio.sfx("skin")
 				float_text(tr("Новый стиль!"), "%s · %d/%d" % [tr(BB.SKINS[nxt][1]), Save.got().size(), BB.SKINS.size()], 3, true))
 	else:
-		combo = 0
 		Audio.buzz(10)
 	score += gained
 	if mode != "arcade":
@@ -1043,12 +1038,8 @@ func apply_bot_move(mv: Dictionary) -> void:
 	for idx in cleared:
 		old[idx] = bot.board[idx]
 		bot.board[idx] = null
-	var gained: int = p.cells.size()
+	var gained: int = bot.sc.add(p.cells.size(), n, n > 0 and bits(bot.board) == 0).gained
 	if n > 0:
-		bot.combo += 1
-		gained += n * n * 10 * bot.combo * (5 if n >= 3 else 1)
-		if bits(bot.board) == 0:
-			gained += 300
 		if n >= 3:
 			bot.gen.since = 0
 			# У бота свой стиль — меняется только от его собственных 3+ линий
@@ -1057,8 +1048,6 @@ func apply_bot_move(mv: Dictionary) -> void:
 				if not bot.is_empty():
 					_set_bot_skin(bot.skin)
 					bot_float(tr("новый стиль")))
-	else:
-		bot.combo = 0
 	bot.score += gained
 
 	bot.pieces[mv.i] = null
@@ -1071,7 +1060,7 @@ func apply_bot_move(mv: Dictionary) -> void:
 	for idx in cleared:
 		bot_board.anim_clear(idx, old[idx], 0.0)
 	if n > 0:
-		bot_float("+%d" % gained + (" ×5" if n >= 3 else ""))
+		bot_float("+%d" % gained)
 		Audio.sfx("botClear")
 	if not bot.get("refilling", false):
 		_bot_check_stuck()
@@ -1118,10 +1107,11 @@ func stuck_reset(is_bot: bool) -> void:
 		if duel.is_empty():
 			return
 		if is_bot:
-			bot.combo = 0
+			bot.sc = Scoring.new()
 			refill_bot_async()
 		else:
 			combo = 0
+			scoring.combo = 0
 			render_board()
 			refill_async(func(): send_state({"reset": true})))
 
@@ -1137,7 +1127,7 @@ func update_timer() -> void:
 func _new_bot(with_gen: bool) -> void:
 	var empty := []
 	empty.resize(N * N)
-	bot = {"board": empty, "pieces": [null, null, null], "score": 0, "combo": 0, "gen": {"since": 0}, "skin": 0}
+	bot = {"board": empty, "pieces": [null, null, null], "score": 0, "sc": Scoring.new(), "gen": {"since": 0}, "skin": 0}
 	if not with_gen:
 		bot.erase("gen")
 	_set_bot_skin(0)
@@ -1289,7 +1279,7 @@ func apply_opp(m: Dictionary) -> void:
 				bot_board.anim_clear(ii, {"c": Color(x[1]), "f": ""}, 0.0)
 	var n := int(m.get("n", 0))
 	if n > 0:
-		bot_float("+%d" % int(m.get("gained", 0)) + (" ×5" if n >= 3 else ""))
+		bot_float("+%d" % int(m.get("gained", 0)))
 		Audio.sfx("botClear")
 	if m.get("reset", false):
 		bot_float(tr("новое поле"))

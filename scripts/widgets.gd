@@ -237,7 +237,7 @@ class TutDemo extends Control:
 			2:
 				var pul := Skins.wave(fposmod(t, 1.2) / 1.2)
 				var fs := int(44 * k)
-				var txt := "×5"
+				var txt := "3+"
 				var tw := UI.F_BLACK.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 				draw_set_transform(Vector2(size.x * 0.5, 70), 0, Vector2.ONE * (1.0 + 0.25 * pul))
 				draw_string(UI.F_BLACK, Vector2(-tw * 0.5, 34 + 7), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(0, 0, 0, 0.3))

@@ -869,7 +869,7 @@ const save = {
 
 // ---------- Состояние ----------
 let mode = 'classic', level = 1;
-let board, pieces, score, combo, goals = [], finished = false;
+let board, pieces, score, combo, goals = [], finished = false, scoring = newScoring();
 
 const $ = id => document.getElementById(id);
 const $board = $('board'), $ghost = $('ghost'), $hud = $('hud');
@@ -945,6 +945,28 @@ function lineCells({ rows, cols }) {
 // плотно прилегают к блокам и гарантированно ставятся все три.
 const ASSIST = 0.8;      // доля «умных» слотов (остальные — случайные, но тоже влезают)
 const CANDIDATES = 14;   // сколько случайных фигур рассматриваем на слот
+// Помощь, когда поле забито: с DANGER_FILL клеток фигуры подбираются, чтобы выбраться
+const DANGER_FILL = 22, DANGER_CANDIDATES = 24;
+
+// ---------- Очки (как в scripts/scoring.gd Godot-версии) ----------
+// фигура — 10 за клетку; линии — 100·n·(n+1)/2, умноженные на серию комбо;
+// серия не сгорает, пока между очищениями не больше двух ходов без линий; чистое поле +3000
+const SCORE = { cell: 10, line: 100, perfect: 3000, grace: 3 };
+function newScoring() { return { combo: 0, miss: 0 }; }
+function scoreMove(st, cells, n, perfect) {
+  let gained = cells * SCORE.cell, bonus = 0;
+  if (n > 0) {
+    st.combo++; st.miss = 0;
+    bonus = SCORE.line * n * (n + 1) / 2 * st.combo + (perfect ? SCORE.perfect : 0);
+    gained += bonus;
+  } else if (++st.miss >= SCORE.grace) st.combo = 0;
+  return { gained, bonus, combo: st.combo };
+}
+function placesCount(b, p) {
+  let k = 0;
+  for (let r = 0; r <= N - p.h; r++) for (let c = 0; c <= N - p.w; c++) if (canPlace(b, p, r, c)) k++;
+  return k;
+}
 
 function bestMove(b, p, all) {
   let best = null;
@@ -1076,6 +1098,7 @@ function smartSet(b0 = board, g = null) {
     if (j) { chosen.push(...j.s); j.s.forEach(s => used.add(s)); b = j.board; }
   }
   if (g) g.since++; else setsSinceBig++;
+  const danger = b0.filter(x => x).length >= DANGER_FILL;
 
   for (let k = chosen.length; k < 3; k++) {
     const cands = [];
@@ -1086,7 +1109,7 @@ function smartSet(b0 = board, g = null) {
       const m = bestMove(b, SHAPES[bigS]);
       if (m) cands.push({ s: bigS, m });
     }
-    for (let t = 0; t < CANDIDATES; t++) {
+    for (let t = 0; t < (danger ? DANGER_CANDIDATES : CANDIDATES); t++) {
       const s = rand(SHAPES.length);
       if (used.has(s)) continue;
       used.add(s);
@@ -1095,7 +1118,13 @@ function smartSet(b0 = board, g = null) {
     }
     if (!cands.length) return null;
     cands.sort((x, y) => y.m.score - x.m.score);
-    const pick = Math.random() < ASSIST
+    let pick;
+    if (danger) {
+      // Поле забито: фигура, что сразу чистит линии, иначе мелкая и влезающая во много мест
+      cands.forEach(cd => { cd.rescue = cd.m.lines * 100 - SHAPES[cd.s].cells.length * 6 + Math.min(placesCount(b, SHAPES[cd.s]), 20); });
+      cands.sort((x, y) => y.rescue - x.rescue);
+      pick = cands[0];
+    } else pick = Math.random() < ASSIST
       ? cands[rand(Math.min(3, cands.length))]   // одна из трёх лучших
       : cands[rand(cands.length)];               // любая, что влезает
     chosen.push(pick.s);
@@ -1355,33 +1384,29 @@ function place(i, p, r, c) {
     board[idx] = { c: p.color, f };
     return idx;
   });
-  let gained = p.cells.length;
-
   const lines = fullLines(board);
   const cleared = lineCells(lines);
   const n = lines.rows.length + lines.cols.length;
   const old = {};
   cleared.forEach(idx => { old[idx] = board[idx]; board[idx] = null; });
   const perfect = n > 0 && board.every(x => !x);
+  const res = scoreMove(scoring, p.cells.length, n, perfect && mode !== 'arcade');
+  const gained = res.gained;
+  combo = res.combo;
 
   SFX.place();
   if (n > 0) {
-    combo++;
     SFX.clear(n, combo);
     buzz(n >= 3 ? [30, 40, 80] : 25);
     if (n >= 3) SFX.mega();
-    const mega = n >= 3 ? 5 : 1; // 3+ линии за ход — очки ×5
-    const bonus = n * n * 10 * combo * mega;
-    gained += bonus;
-    if (perfect && mode !== 'arcade') gained += 300;
+    const bonus = res.bonus - (perfect && mode !== 'arcade' ? SCORE.perfect : 0);
     const praise = n >= 4 ? 'Невероятно!' : n === 3 ? 'Отлично!' : n === 2 ? 'Хорошо!' : '';
     const sub = [];
-    if (mode !== 'arcade' && mega > 1) sub.push('×5!');
     if (mode !== 'arcade' && praise) sub.push(praise);
     if (combo > 1) sub.push(`Комбо ×${combo}`);
     const main = mode !== 'arcade' ? `+${bonus}` : praise || sub.shift();
     if (main) floatText(main, sub.join(' · '), n, mode === 'arcade');
-    if (perfect) setTimeout(() => { SFX.perfect(); floatText('Чистое поле!', mode !== 'arcade' ? '+300' : '✨', 4, true); }, 500);
+    if (perfect) setTimeout(() => { SFX.perfect(); floatText('Чистое поле!', mode !== 'arcade' ? `+${SCORE.perfect}` : '✨', 4, true); }, 500);
     if (n >= 2 || perfect) shake(2 + n * 2);
     // 3 и больше линий за один ход — новый стиль блоков
     if (n >= 3) {
@@ -1395,7 +1420,6 @@ function place(i, p, r, c) {
       }, 650);
     }
   } else {
-    combo = 0;
     buzz(10);
   }
   score += gained;
@@ -1590,18 +1614,15 @@ function applyBotMove({ p, i, r, c }) {
   const n = lines.rows.length + lines.cols.length;
   const old = {};
   cleared.forEach(idx => { old[idx] = bot.board[idx]; bot.board[idx] = null; });
-  let gained = p.cells.length;
+  const gained = scoreMove(bot.sc, p.cells.length, n, n > 0 && bot.board.every(x => !x)).gained;
   if (n > 0) {
-    bot.combo++;
-    gained += n * n * 10 * bot.combo * (n >= 3 ? 5 : 1);
-    if (bot.board.every(x => !x)) gained += 300;
     if (n >= 3) {
       bot.gen.since = 0;
       // У бота свой стиль — меняется только от его собственных 3+ линий
       bot.skin = (bot.skin + 1) % SKINS.length;
       setTimeout(() => { if (bot) { setSkinClass($('botPanel'), bot.skin); botFloat('новый стиль'); } }, 500);
     }
-  } else bot.combo = 0;
+  }
   bot.score += gained;
 
   bot.pieces[i] = null;
@@ -1610,7 +1631,7 @@ function applyBotMove({ p, i, r, c }) {
   placed.forEach(idx => { if (!cleared.has(idx)) botEls[idx].classList.add('land'); });
   cleared.forEach(idx => { paintCell(botEls[idx], old[idx]); botEls[idx].classList.add('clearing'); });
   if (cleared.size) setTimeout(() => { if (bot) botEls.forEach((el, k) => paintCell(el, bot.board[k])); }, 360);
-  if (n > 0) { botFloat(`+${gained}` + (n >= 3 ? ' ×5' : '')); SFX.botClear(); }
+  if (n > 0) { botFloat(`+${gained}`); SFX.botClear(); }
 
   if (!bot.pieces.some(x => x && fitsAnywhere(bot.board, x))) {
     clearTimeout(duel.botTimer);
@@ -1633,10 +1654,10 @@ function stuckReset(isBot) {
   setTimeout(() => {
     if (!duel) return;
     if (isBot) {
-      bot.board = Array(N * N).fill(null); bot.combo = 0;
+      bot.board = Array(N * N).fill(null); bot.sc = newScoring();
       refillBot(); renderBot();
     } else {
-      board.fill(null); combo = 0;
+      board.fill(null); combo = 0; scoring.combo = 0;
       refill(); renderBoard(); renderTray(true);
       sendState({ reset: true });
     }
@@ -1651,7 +1672,7 @@ function updateTimer() {
 }
 
 function startDuel() {
-  bot = { board: Array(N * N).fill(null), pieces: [], score: 0, combo: 0, gen: { since: 0 }, skin: 0 };
+  bot = { board: Array(N * N).fill(null), pieces: [], score: 0, sc: newScoring(), gen: { since: 0 }, skin: 0 };
   setSkinClass($('botPanel'), bot.skin);
   refillBot(); renderBot();
   duel = { timeLeft: DUEL_TIME };
@@ -1696,7 +1717,7 @@ function startGame(m, n) {
   $('btnRestart').style.display = mode === 'online' ? 'none' : '';
   $('botHead').textContent = '🤖 Бот';
   board = Array(N * N).fill(null);
-  score = 0; combo = 0; finished = false;
+  score = 0; combo = 0; scoring = newScoring(); finished = false;
   shownScore = 0; bestAtStart = save.best; recordShown = false; setsSinceBig = 0;
   goals = [];
   if (mode === 'arcade') {
@@ -1822,7 +1843,7 @@ function applyOpp(m) {
     botEls[i].classList.add('clearing');
   });
   if (cl.length) setTimeout(() => { if (bot) botEls.forEach((el, k) => paintCell(el, bot.board[k])); }, 360);
-  if (m.n > 0) { botFloat(`+${m.gained | 0}` + (m.n >= 3 ? ' ×5' : '')); SFX.botClear(); }
+  if (m.n > 0) { botFloat(`+${m.gained | 0}`); SFX.botClear(); }
   if (m.reset) botFloat('новое поле');
   $('botStatus').textContent = 'играет';
 }
@@ -1848,7 +1869,7 @@ function countdown(ms, done) {
 function startOnlineMatch(m) {
   oppName = String(m.opponent || 'Соперник').slice(0, 16);
   startGame('online');
-  bot = { board: Array(N * N).fill(null), pieces: [], score: 0, combo: 0, skin: 0 };
+  bot = { board: Array(N * N).fill(null), pieces: [], score: 0, sc: newScoring(), skin: 0 };
   setSkinClass($('botPanel'), 0);
   renderBot();
   $('botHead').textContent = '🧑 ' + oppName;
@@ -2036,17 +2057,17 @@ const TUT = [
         <div class="dPiece"><div class="cell block" style="--c:#ff6fc8"></div><div class="cell block" style="--c:#ff6fc8"></div></div>
         <div class="dHand">👆</div>`;
     } },
-  { t: 'Собирай линии', x: 'Заполни строку или столбец целиком — они исчезнут и дадут очки. Несколько ходов подряд — комбо!',
+  { t: 'Собирай линии', x: 'Заполни строку или столбец целиком — они исчезнут и дадут очки. Убирай линии почаще: комбо растёт ×2, ×3, ×4… и не сгорает, пока между линиями не больше двух ходов.',
     demo: el => {
       const row = Array.from({ length: 8 }, (_, i) =>
         `<div class="cell${i < 6 ? ' block' : ''}" style="--c:#36c3ff"></div>`).join('');
       el.innerHTML = `<div class="dLine">${row}<div class="dDrop">
         <div class="cell block" style="--c:#ffd84d"></div><div class="cell block" style="--c:#ffd84d"></div></div></div>`;
     } },
-  { t: '3 линии сразу = ×5', x: 'Снеси 3 и больше линий одним ходом — очки ×5 и новый стиль блоков. Собери все 20!',
+  { t: 'Несколько линий сразу', x: 'Чем больше линий за один ход, тем больше очков. 3 и больше — новый стиль блоков. Собери все 20!',
     demo: el => {
       const pal = ['#ff5d5d', '#36c3ff', '#4fd67a', '#ffd84d'];
-      el.innerHTML = `<div class="dX5">×5</div><div class="dSkins" id="dSkins">${pal.map((c, i) =>
+      el.innerHTML = `<div class="dX5">3+</div><div class="dSkins" id="dSkins">${pal.map((c, i) =>
         `<div class="cell block" style="--c:${c};--i:${i}"></div>`).join('')}</div>`;
       let k = 1;
       const box = el.querySelector('#dSkins');

@@ -7,6 +7,11 @@ extends RefCounted
 const N := 8
 const ASSIST := 0.8      ## доля «умных» слотов (остальные — случайные, но тоже влезают)
 const CANDIDATES := 14   ## сколько случайных фигур рассматриваем на слот
+## Помощь, когда поле забито: с DANGER_FILL клеток все фигуры подбираются под поле
+## (лучшие из большего числа кандидатов) — новичку легче выбраться
+const DANGER_FILL := 22
+const DANGER_CANDIDATES := 24
+static var ease := true      ## выключается только в tools/classic_sim.gd для сравнения
 const LOW56 := 0x00FFFFFFFFFFFFFF
 
 static var ROW: PackedInt64Array
@@ -143,6 +148,17 @@ static func _eval(b: int, m: int, r: int, c: int, h: int, w: int) -> Dictionary:
 
 
 ## Лучший ход фигуры (или {}), all — если передан, туда складываются все ходы
+## Во сколько мест можно поставить фигуру
+static func places(b: int, piece: Dictionary) -> int:
+	var base: int = piece.base
+	var n := 0
+	for r in N - piece.h + 1:
+		for c in N - piece.w + 1:
+			if not (b & (base << (r * N + c))):
+				n += 1
+	return n
+
+
 static func best_move(b: int, piece: Dictionary, all = null) -> Dictionary:
 	var base: int = piece.base
 	var h: int = piece.h
@@ -297,6 +313,8 @@ static func smart_set(b0: int, gen: Dictionary) -> Array:
 				used[s] = true
 			b = j.board
 	gen.since += 1
+	var danger := ease and popcount(b0) >= DANGER_FILL
+	var tries := DANGER_CANDIDATES if danger else CANDIDATES
 
 	for k in range(chosen.size(), 3):
 		var cands := []
@@ -307,7 +325,7 @@ static func smart_set(b0: int, gen: Dictionary) -> Array:
 			var m := best_move(b, BB.SHAPES[big_s])
 			if not m.is_empty():
 				cands.append({"s": big_s, "m": m})
-		for t in CANDIDATES:
+		for t in tries:
 			var s := randi() % BB.SHAPES.size()
 			if used.has(s):
 				continue
@@ -319,7 +337,13 @@ static func smart_set(b0: int, gen: Dictionary) -> Array:
 			return []
 		cands.sort_custom(func(x, y): return x.m.score > y.m.score)
 		var pick: Dictionary
-		if randf() < ASSIST:
+		if danger:
+			# Поле забито: фигура, что сразу чистит линии, иначе мелкая и влезающая во много мест
+			for cd in cands:
+				cd.rescue = int(cd.m.lines) * 100 - BB.SHAPES[cd.s].cells.size() * 6 + mini(places(b, BB.SHAPES[cd.s]), 20)
+			cands.sort_custom(func(x, y): return x.rescue > y.rescue)
+			pick = cands[0]
+		elif randf() < ASSIST:
 			pick = cands[randi() % mini(3, cands.size())]   # одна из трёх лучших
 		else:
 			pick = cands[randi() % cands.size()]            # любая, что влезает
